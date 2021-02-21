@@ -9,22 +9,21 @@ extern crate wgpu;
 extern crate winit;
 
 mod simple_error;
+use simple_error::*;
 
+use std::error::Error;
+use std::f32::consts::PI;
+use std::mem;
+use std::time::SystemTime;
+
+use bytemuck::{Pod, Zeroable};
 use imgui::*;
 use imgui_winit_support::*;
-use shaderc::ShaderKind;
-use std::error::Error;
-use std::time::SystemTime;
 use wgpu::util::DeviceExt;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
-
-use bytemuck::{Pod, Zeroable};
-use simple_error::*;
-use std::f32::consts::PI;
-use std::mem;
 
 const WORLD_DIAMETER: f64 = 6_371_000.0;
 
@@ -185,10 +184,10 @@ fn prepare_new_shader(
     device: &wgpu::Device,
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> Result<(wgpu::ShaderModule, wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
-    let vs_artifact = compile_shader("src/shader.vert", ShaderKind::Vertex)?;
+    let vs_artifact = compile_shader("src/shader.vert", shaderc::ShaderKind::Vertex)?;
     let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_artifact.as_binary_u8()));
 
-    let fs_artifact = compile_shader("src/shader.frag", ShaderKind::Fragment)?;
+    let fs_artifact = compile_shader("src/shader.frag", shaderc::ShaderKind::Fragment)?;
     let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_artifact.as_binary_u8()));
 
     let new = create_render_pipeline(
