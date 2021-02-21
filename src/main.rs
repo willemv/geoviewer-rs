@@ -1,19 +1,18 @@
 extern crate bytemuck;
+extern crate crossbeam;
 extern crate futures;
+extern crate glam;
 extern crate imgui;
 extern crate imgui_winit_support;
 extern crate shaderc;
 extern crate wgpu;
 extern crate winit;
-extern crate crossbeam;
-extern crate glam;
 
 mod simple_error;
 
-use glam::Vec3;
 use imgui::*;
 use imgui_winit_support::*;
-use std::{error::Error, time::Duration};
+use std::error::Error;
 use std::time::SystemTime;
 use wgpu::util::DeviceExt;
 use winit::event::{Event, WindowEvent};
@@ -21,12 +20,11 @@ use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-use bytemuck::{Pod, Zeroable, bytes_of};
+use bytemuck::{Pod, Zeroable};
 use simple_error::*;
-use std::mem;
-use std::path::*;
-use std::sync::Arc;
 use std::f32::consts::PI;
+use std::mem;
+use std::sync::Arc;
 
 const WORLD_DIAMETER: f64 = 6_371_000.0;
 
@@ -77,36 +75,30 @@ fn create_model_vertices(side: f64) -> (Vec<Vertex>, Vec<u16>) {
     let quarter = side / 4.0;
     let vertex_data = vec![
         //front left lower
-        vertex([ half, -half, -quarter, 1.0]),
+        vertex([half, -half, -quarter, 1.0]),
         //front right lower
-        vertex([ half,  half, -quarter, 1.0]),
+        vertex([half, half, -quarter, 1.0]),
         //back right lower
-        vertex([-half,  half, -quarter, 1.0]),
+        vertex([-half, half, -quarter, 1.0]),
         //back left lower
         vertex([-half, -half, -quarter, 1.0]),
         //front left upper
-        vertex([ half, -half, quarter, 1.0]),
+        vertex([half, -half, quarter, 1.0]),
         //front right upper
-        vertex([ half,  half, quarter, 1.0]),
+        vertex([half, half, quarter, 1.0]),
         //back right upper
-        vertex([-half,  half, quarter, 1.0]),
+        vertex([-half, half, quarter, 1.0]),
         //back left upper
         vertex([-half, -half, quarter, 1.0]),
     ];
 
     let index_data = vec![
-        0, 1, 2, //bottom plane
-        0, 2, 3,
-        0, 1, 5, //front plane
-        0, 5, 4,
-        1, 2, 6, //right plane
-        1, 6, 5,
-        2, 3, 7, //back plane
-        2, 7, 6,
-        3, 0, 4, //left plane
-        3, 4, 7,
-        4, 5, 6, //top plane
-        4, 6, 7,
+        0, 1, 2, 0, 2, 3, //bottom plane
+        0, 1, 5, 0, 5, 4, //front plane
+        1, 2, 6, 1, 6, 5, //right plane
+        2, 3, 7, 2, 7, 6, //back plane
+        3, 0, 4, 3, 4, 7, //left plane
+        4, 5, 6, 4, 6, 7, //top plane
     ];
 
     (vertex_data, index_data)
@@ -123,125 +115,6 @@ impl Drop for Data {
     }
 }
 
-fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(), Box<dyn Error>> {
-    let frame = context.swap_chain.get_current_frame()?.output;
-
-    let device = &context.device;
-
-    let imgui = &mut gui.imgui;
-    gui.imgui_platform
-        .prepare_frame(imgui.io_mut(), &context.window)?;
-
-    let ui = imgui.frame();
-
-    //draw ui
-    {
-        let window = imgui::Window::new(im_str!("Hello world"));
-        // let current_shader = context.current_shader.as_ref();
-        window
-            .position([0.0, 0.0], Condition::FirstUseEver)
-            .size([400.0, 80.0], Condition::FirstUseEver)
-            .build(&ui, || {
-                ui.text(im_str!("Text"));
-            });
-    }
-
-    let view_width = context.swap_chain_descriptor.width;
-    let view_height = context.swap_chain_descriptor.height;
-    let aspect = (view_width as f32) / (view_height as f32);
-
-    // camera position in world coordinates
-    let eye = glam::DVec3::new(3.0 * WORLD_DIAMETER, 3.0 * WORLD_DIAMETER, WORLD_DIAMETER);
-    let center = glam::DVec3::new(0.0, 0.0, 0.0);
-    let up = glam::DVec3::new(0.0, 0.0, 1.0);
-
-
-
-    let vertex_uniforms = VertexUniforms {
-        model: glam::Mat4::identity(),
-        view: glam::DMat4::look_at_lh(eye, center, up).as_f32(),
-        projection: glam::Mat4::perspective_lh(PI / 4.0, aspect, 0.0, 10.0),
-    };
-
-    let vertex_uniforms_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: None,
-        contents: bytemuck::bytes_of(&vertex_uniforms),
-        usage: wgpu::BufferUsage::UNIFORM,
-    });
-
-    let duration = SystemTime::now()
-        .duration_since(app.start_time)?
-        .as_millis() as f64;
-    let time = (duration / 1000.0) as f32;
-
-    let resolution = [
-        view_width as f32,
-        view_height as f32,
-        0.0,
-        0.0,
-    ];
-    let fragment_uniforms = FragmentUniforms { resolution, time };
-
-    let fragment_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: None,
-        contents: bytemuck::bytes_of(&fragment_uniforms),
-        usage: wgpu::BufferUsage::UNIFORM,
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Colors bind group descriptor"),
-        layout: &context.bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(vertex_uniforms_buf.slice(..)),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Buffer(fragment_uniform_buf.slice(..)),
-            },
-        ],
-    });
-
-    let mut encoder = context
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("WGPU Command Encoder Descriptor"),
-        });
-    {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
-                },
-            }],
-            depth_stencil_attachment: None,
-        });
-        render_pass.set_pipeline(&context.render_pipeline);
-        render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.set_index_buffer(context.index_buffer.slice(..));
-        render_pass.set_vertex_buffer(0, context.vertex_buffer.slice(..));
-        render_pass.draw_indexed(0..context.index_count, 0, 0..1);
-
-        let renderer = &mut gui.imgui_renderer;
-        renderer
-            .render(
-                ui.render(),
-                &context.queue,
-                &context.device,
-                &mut render_pass,
-            )
-            .map_err(|_| SimpleError::new("Error rendering imgui"))?;
-    }
-
-    context.queue.submit(Some(encoder.finish()));
-
-    Ok(())
-}
-
 #[allow(dead_code)]
 struct App {
     start_time: SystemTime,
@@ -250,14 +123,10 @@ struct App {
 }
 
 struct RenderContext {
-    current_shader: Option<String>,
     window: Window,
     surface: wgpu::Surface,
     device: Arc<wgpu::Device>,
-    vertex_shader: Arc<wgpu::ShaderModule>,
-    fragment_shader: wgpu::ShaderModule,
     bind_group_layout: wgpu::BindGroupLayout,
-    pipeline_layout: Arc<wgpu::PipelineLayout>,
     render_pipeline: wgpu::RenderPipeline,
     swap_chain_descriptor: wgpu::SwapChainDescriptor,
     vertex_buffer: wgpu::Buffer,
@@ -310,7 +179,6 @@ fn create_render_pipeline(
 }
 
 async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Error>> {
-
     //set up wgpu
     let window_size = window.inner_size();
 
@@ -396,7 +264,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 visibility: wgpu::ShaderStage::VERTEX,
                 ty: wgpu::BindingType::UniformBuffer {
                     dynamic: false,
-                    min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<VertexUniforms>() as _),
+                    min_binding_size: wgpu::BufferSize::new(
+                        std::mem::size_of::<VertexUniforms>() as _
+                    ),
                 },
                 count: None,
             },
@@ -405,7 +275,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 visibility: wgpu::ShaderStage::FRAGMENT,
                 ty: wgpu::BindingType::UniformBuffer {
                     dynamic: false,
-                    min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<FragmentUniforms>() as _),
+                    min_binding_size: wgpu::BufferSize::new(
+                        std::mem::size_of::<FragmentUniforms>() as _,
+                    ),
                 },
                 count: None,
             },
@@ -467,13 +339,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     Ok((
         RenderContext {
-            current_shader: None,
             window,
             surface,
             device: Arc::new(device),
-            vertex_shader: Arc::new(vertex_shader),
-            fragment_shader,
-            pipeline_layout: Arc::new(pipeline_layout),
             bind_group_layout,
             render_pipeline,
             swap_chain_descriptor,
@@ -494,6 +362,118 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             imgui_platform: platform,
         },
     ))
+}
+
+fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(), Box<dyn Error>> {
+    let frame = context.swap_chain.get_current_frame()?.output;
+
+    let device = &context.device;
+
+    let imgui = &mut gui.imgui;
+    gui.imgui_platform
+        .prepare_frame(imgui.io_mut(), &context.window)?;
+
+    let ui = imgui.frame();
+
+    //draw ui
+    {
+        let window = imgui::Window::new(im_str!("Hello world"));
+        // let current_shader = context.current_shader.as_ref();
+        window
+            .position([0.0, 0.0], Condition::FirstUseEver)
+            .size([400.0, 80.0], Condition::FirstUseEver)
+            .build(&ui, || {
+                ui.text(im_str!("Text"));
+            });
+    }
+
+    let view_width = context.swap_chain_descriptor.width;
+    let view_height = context.swap_chain_descriptor.height;
+    let aspect = (view_width as f32) / (view_height as f32);
+
+    // camera position in world coordinates
+    let eye = glam::DVec3::new(3.0 * WORLD_DIAMETER, 3.0 * WORLD_DIAMETER, WORLD_DIAMETER);
+    let center = glam::DVec3::new(0.0, 0.0, 0.0);
+    let up = glam::DVec3::new(0.0, 0.0, 1.0);
+
+    let vertex_uniforms = VertexUniforms {
+        model: glam::Mat4::identity(),
+        view: glam::DMat4::look_at_lh(eye, center, up).as_f32(),
+        projection: glam::Mat4::perspective_lh(PI / 4.0, aspect, 0.0, 10.0),
+    };
+
+    let vertex_uniforms_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::bytes_of(&vertex_uniforms),
+        usage: wgpu::BufferUsage::UNIFORM,
+    });
+
+    let duration = SystemTime::now()
+        .duration_since(app.start_time)?
+        .as_millis() as f64;
+    let time = (duration / 1000.0) as f32;
+
+    let resolution = [view_width as f32, view_height as f32, 0.0, 0.0];
+    let fragment_uniforms = FragmentUniforms { resolution, time };
+
+    let fragment_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::bytes_of(&fragment_uniforms),
+        usage: wgpu::BufferUsage::UNIFORM,
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Colors bind group descriptor"),
+        layout: &context.bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(vertex_uniforms_buf.slice(..)),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Buffer(fragment_uniform_buf.slice(..)),
+            },
+        ],
+    });
+
+    let mut encoder = context
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("WGPU Command Encoder Descriptor"),
+        });
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &frame.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+        render_pass.set_pipeline(&context.render_pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_index_buffer(context.index_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, context.vertex_buffer.slice(..));
+        render_pass.draw_indexed(0..context.index_count, 0, 0..1);
+
+        let renderer = &mut gui.imgui_renderer;
+        renderer
+            .render(
+                ui.render(),
+                &context.queue,
+                &context.device,
+                &mut render_pass,
+            )
+            .map_err(|_| SimpleError::new("Error rendering imgui"))?;
+    }
+
+    context.queue.submit(Some(encoder.finish()));
+
+    Ok(())
 }
 
 async fn run() -> Result<(), Box<dyn Error>> {
