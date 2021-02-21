@@ -12,6 +12,7 @@ mod simple_error;
 
 use imgui::*;
 use imgui_winit_support::*;
+use shaderc::ShaderKind;
 use std::error::Error;
 use std::time::SystemTime;
 use wgpu::util::DeviceExt;
@@ -24,7 +25,6 @@ use bytemuck::{Pod, Zeroable};
 use simple_error::*;
 use std::f32::consts::PI;
 use std::mem;
-use std::sync::Arc;
 
 const WORLD_DIAMETER: f64 = 6_371_000.0;
 
@@ -125,8 +125,11 @@ struct App {
 struct RenderContext {
     window: Window,
     surface: wgpu::Surface,
-    device: Arc<wgpu::Device>,
+    device: wgpu::Device,
+    vertex_shader: wgpu::ShaderModule,
+    fragment_shader: wgpu::ShaderModule,
     bind_group_layout: wgpu::BindGroupLayout,
+    pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
     swap_chain_descriptor: wgpu::SwapChainDescriptor,
     vertex_buffer: wgpu::Buffer,
@@ -176,6 +179,39 @@ fn create_render_pipeline(
         sample_mask: !0,
         alpha_to_coverage_enabled: false,
     })
+}
+
+fn prepare_new_shader(
+    device: &wgpu::Device,
+    pipeline_layout: &wgpu::PipelineLayout,
+) -> Result<(wgpu::ShaderModule, wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
+    let vs_artifact = compile_shader("src/shader.vert", ShaderKind::Vertex)?;
+    let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_artifact.as_binary_u8()));
+
+    let fs_artifact = compile_shader("src/shader.frag", ShaderKind::Fragment)?;
+    let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_artifact.as_binary_u8()));
+
+    let new = create_render_pipeline(
+        device,
+        &vs_module,
+        &fs_module,
+        pipeline_layout,
+        wgpu::TextureFormat::Bgra8Unorm,
+    );
+    Ok((vs_module, fs_module, new))
+}
+
+fn compile_shader(
+    path: &str,
+    kind: shaderc::ShaderKind,
+) -> Result<shaderc::CompilationArtifact, Box<dyn Error>> {
+    let shader_text = std::fs::read_to_string(path)?;
+    let mut compiler = shaderc::Compiler::new()
+        .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
+    // let options = shaderc::CompileOptions::new()
+    // .ok_or_else(|| SimpleError::new("Could not create compile options"))?;
+    let binary = compiler.compile_into_spirv(&shader_text, kind, path, "main", None)?;
+    Ok(binary)
 }
 
 async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Error>> {
@@ -341,7 +377,10 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         RenderContext {
             window,
             surface,
-            device: Arc::new(device),
+            device: device,
+            vertex_shader: vertex_shader,
+            fragment_shader,
+            pipeline_layout: pipeline_layout,
             bind_group_layout,
             render_pipeline,
             swap_chain_descriptor,
@@ -375,6 +414,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
     let ui = imgui.frame();
 
+    let mut reload_shaders = false;
     //draw ui
     {
         let window = imgui::Window::new(im_str!("Hello world"));
@@ -384,7 +424,21 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             .size([400.0, 80.0], Condition::FirstUseEver)
             .build(&ui, || {
                 ui.text(im_str!("Text"));
+                reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
             });
+    }
+
+    if reload_shaders {
+        match prepare_new_shader(&context.device, &context.pipeline_layout) {
+            Ok((vs_shader, fs_shader, pipeline)) => {
+                context.vertex_shader = vs_shader;
+                context.fragment_shader = fs_shader;
+                context.render_pipeline = pipeline;
+            }
+            Err(ref err) => {
+                println!("Error compiling shader: {}", *err);
+            }
+        }
     }
 
     let view_width = context.swap_chain_descriptor.width;
