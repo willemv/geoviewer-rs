@@ -405,6 +405,11 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(), Box<dyn Error>> {
     let frame = context.swap_chain.get_current_frame()?.output;
 
+    let duration = SystemTime::now()
+        .duration_since(app.start_time)?
+        .as_millis() as f64;
+    let time = (duration / 1000.0);
+
     let device = &context.device;
 
     let imgui = &mut gui.imgui;
@@ -445,7 +450,9 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let aspect = (view_width as f32) / (view_height as f32);
 
     // camera position in world coordinates
-    let eye = glam::DVec3::new(3.0 * WORLD_DIAMETER, 3.0 * WORLD_DIAMETER, WORLD_DIAMETER);
+    let camera_x = 3.0 * WORLD_DIAMETER * time.cos();
+    let camera_y = 3.0 * WORLD_DIAMETER * time.sin();
+    let eye = glam::DVec3::new(camera_x, camera_y, WORLD_DIAMETER);
     let center = glam::DVec3::new(0.0, 0.0, 0.0);
     let up = glam::DVec3::new(0.0, 0.0, 1.0);
 
@@ -461,13 +468,9 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         usage: wgpu::BufferUsage::UNIFORM,
     });
 
-    let duration = SystemTime::now()
-        .duration_since(app.start_time)?
-        .as_millis() as f64;
-    let time = (duration / 1000.0) as f32;
 
     let resolution = [view_width as f32, view_height as f32, 0.0, 0.0];
-    let fragment_uniforms = FragmentUniforms { resolution, time };
+    let fragment_uniforms = FragmentUniforms { resolution, time: time as f32 };
 
     let fragment_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,

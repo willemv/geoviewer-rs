@@ -12,6 +12,10 @@ out gl_PerVertex {
     vec4 gl_Position;
 };
 
+layout (location = 0) out vec3 viewPosition;
+
 void main() {
-    gl_Position = vu.projection * vu.view * vu.model * position;
+    vec4 view = vu.view * vu.model * position;
+    viewPosition = view.xyz;
+    gl_Position = vu.projection * view;
 }
