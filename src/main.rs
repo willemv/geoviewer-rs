@@ -12,7 +12,7 @@ mod simple_error;
 use simple_error::*;
 
 use std::error::Error;
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 use std::mem;
 use std::time::SystemTime;
 
@@ -25,7 +25,8 @@ use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-const WORLD_DIAMETER: f64 = 6_371_000.0;
+const WORLD_RADIUS: f32 = 6_371_000.0 / 2.0;
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -68,10 +69,9 @@ fn vertex(pos: [f32; 4]) -> Vertex {
     Vertex { _pos: pos }
 }
 
-fn create_model_vertices(side: f64) -> (Vec<Vertex>, Vec<u16>) {
-    let side = side as f32;
-    let half = side / 2.0;
-    let quarter = side / 4.0;
+fn create_model_vertices(half: f64) -> (Vec<Vertex>, Vec<u16>) {
+    let half = half as f32;
+    let quarter = half / 2.0;
     let vertex_data = vec![
         //front left lower
         vertex([half, -half, -quarter, 1.0]),
@@ -92,7 +92,7 @@ fn create_model_vertices(side: f64) -> (Vec<Vertex>, Vec<u16>) {
     ];
 
     let index_data = vec![
-        0, 1, 2, 0, 2, 3, //bottom plane
+        0, 2, 1, 0, 3, 2, //bottom plane
         0, 1, 5, 0, 5, 4, //front plane
         1, 2, 6, 1, 6, 5, //right plane
         2, 3, 7, 2, 7, 6, //back plane
@@ -118,6 +118,7 @@ impl Drop for Data {
 struct App {
     start_time: SystemTime,
     triangle_color: [f32; 4],
+    camera: Camera,
     demo_window_open: bool,
 }
 
@@ -136,6 +137,15 @@ struct RenderContext {
     index_count: u32,
     swap_chain: wgpu::SwapChain,
     queue: wgpu::Queue,
+    depth_texture: wgpu::TextureView,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Camera {
+    eye: glam::Vec3,
+    near: f64,
+    far: f64,
+    fov_y_radians: f64,
 }
 
 struct Gui {
@@ -162,10 +172,19 @@ fn create_render_pipeline(
             module: fragment_shader_module,
             entry_point: "main",
         }),
-        rasterization_state: None,
+        rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            front_face: wgpu::FrontFace::Cw,
+            cull_mode: wgpu::CullMode::Back,
+            ..Default::default()
+        }),
         primitive_topology: wgpu::PrimitiveTopology::TriangleList,
         color_states: &[swap_chain_format.into()],
-        depth_stencil_state: None,
+        depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Greater,
+            stencil: wgpu::StencilStateDescriptor::default(),
+        }),
         vertex_state: wgpu::VertexStateDescriptor {
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
@@ -249,7 +268,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     println!("Device: {:?}", device);
 
     //setup data
-    let (vertices, indices) = create_model_vertices(WORLD_DIAMETER);
+    let (vertices, indices) = create_model_vertices(WORLD_RADIUS as f64);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -372,6 +391,20 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let renderer = imgui_wgpu::Renderer::new(&mut imgui, &device, &queue, renderer_config);
 
+    let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+        size: wgpu::Extent3d {
+            width: swap_chain_descriptor.width,
+            height: swap_chain_descriptor.height,
+            depth: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: DEPTH_FORMAT,
+        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+        label: Some("depth"),
+    });
+
     Ok((
         RenderContext {
             window,
@@ -388,10 +421,21 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             index_buffer,
             index_count,
             queue,
+            depth_texture: depth_texture.create_view(&wgpu::TextureViewDescriptor::default()),
         },
         App {
             start_time: SystemTime::now(),
             triangle_color: [1.0, 0.0, 0.0, 1.0],
+            camera: Camera {
+                eye: glam::Vec3::new(
+                    6.0 * WORLD_RADIUS,
+                    6.0 * WORLD_RADIUS,
+                    0.0 * WORLD_RADIUS,
+                ),
+                fov_y_radians: PI / 4.0,
+                near: 5.0 * WORLD_RADIUS as f64,
+                far: 7.0 * WORLD_RADIUS as f64,
+            },
             demo_window_open: true,
         },
         Gui {
@@ -408,7 +452,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let duration = SystemTime::now()
         .duration_since(app.start_time)?
         .as_millis() as f64;
-    let time = (duration / 1000.0);
+    let time = duration / 1000.0;
 
     let device = &context.device;
 
@@ -421,6 +465,15 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let mut reload_shaders = false;
     //draw ui
     {
+        let mut t = [
+            app.camera.eye.x / WORLD_RADIUS,
+            app.camera.eye.y / WORLD_RADIUS,
+            app.camera.eye.z / WORLD_RADIUS,
+            (app.camera.near as f32/ WORLD_RADIUS),
+            (app.camera.far as f32/ WORLD_RADIUS),
+
+        ];
+
         let window = imgui::Window::new(im_str!("Hello world"));
         // let current_shader = context.current_shader.as_ref();
         window
@@ -429,7 +482,25 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             .build(&ui, || {
                 ui.text(im_str!("Text"));
                 reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
+                ui.text(im_str!("Camera"));
+                imgui::Drag::new(im_str!("eye_x")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[0]);
+                imgui::Drag::new(im_str!("eye_y")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[1]);
+                imgui::Drag::new(im_str!("eye_z")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[2]);
+                imgui::Drag::new(im_str!("near")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[3]);
+                imgui::Drag::new(im_str!("far")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[4]);
+
+                ui.checkbox(im_str!("demo"), &mut app.demo_window_open);
             });
+
+        if app.demo_window_open {
+            ui.show_demo_window(&mut app.demo_window_open);
+        }
+
+        app.camera.eye.x = t[0] * WORLD_RADIUS;
+        app.camera.eye.y = t[1] * WORLD_RADIUS;
+        app.camera.eye.z = t[2] * WORLD_RADIUS;
+        app.camera.near = t[3] as f64 * WORLD_RADIUS as f64;
+        app.camera.far = t[4] as f64 * WORLD_RADIUS as f64;
     }
 
     if reload_shaders {
@@ -450,16 +521,20 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let aspect = (view_width as f32) / (view_height as f32);
 
     // camera position in world coordinates
-    let camera_x = 3.0 * WORLD_DIAMETER * time.cos();
-    let camera_y = 3.0 * WORLD_DIAMETER * time.sin();
-    let eye = glam::DVec3::new(camera_x, camera_y, WORLD_DIAMETER);
+
+    let eye = app.camera.eye;
     let center = glam::DVec3::new(0.0, 0.0, 0.0);
     let up = glam::DVec3::new(0.0, 0.0, 1.0);
 
     let vertex_uniforms = VertexUniforms {
         model: glam::Mat4::identity(),
-        view: glam::DMat4::look_at_lh(eye, center, up).as_f32(),
-        projection: glam::Mat4::perspective_lh(PI / 4.0, aspect, 0.0, 10.0),
+        view: glam::DMat4::look_at_lh(eye.as_f64(), center, up).as_f32(),
+        projection: glam::Mat4::perspective_lh(
+            app.camera.fov_y_radians as f32,
+            aspect,
+            app.camera.near as f32,
+            app.camera.far as f32,
+        ),
     };
 
     let vertex_uniforms_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -468,9 +543,11 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         usage: wgpu::BufferUsage::UNIFORM,
     });
 
-
     let resolution = [view_width as f32, view_height as f32, 0.0, 0.0];
-    let fragment_uniforms = FragmentUniforms { resolution, time: time as f32 };
+    let fragment_uniforms = FragmentUniforms {
+        resolution,
+        time: time as f32,
+    };
 
     let fragment_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
@@ -508,16 +585,35 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                attachment: &context.depth_texture,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(-1.0),
+                    store: false,
+                }),
+                stencil_ops: None,
+            }),
         });
         render_pass.set_pipeline(&context.render_pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_index_buffer(context.index_buffer.slice(..));
         render_pass.set_vertex_buffer(0, context.vertex_buffer.slice(..));
         render_pass.draw_indexed(0..context.index_count, 0, 0..1);
+    }
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &frame.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
 
-        let renderer = &mut gui.imgui_renderer;
-        renderer
+        gui.imgui_renderer
             .render(
                 ui.render(),
                 &context.queue,
@@ -553,7 +649,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 context.swap_chain_descriptor.height = size.height;
                 context.swap_chain = context
                     .device
-                    .create_swap_chain(&context.surface, &context.swap_chain_descriptor)
+                    .create_swap_chain(&context.surface, &context.swap_chain_descriptor);
+
+                let depth_texture = context.device.create_texture(&wgpu::TextureDescriptor {
+                    size: wgpu::Extent3d {
+                        width: size.width,
+                        height: size.height,
+                        depth: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: DEPTH_FORMAT,
+                    usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                    label: None,
+                });
+                context.depth_texture =
+                    depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
             }
             Event::MainEventsCleared => {
                 match render(&mut context, &mut app, &mut gui) {
@@ -570,6 +682,40 @@ async fn run() -> Result<(), Box<dyn Error>> {
             } => {
                 println!("Exiting...");
                 *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
+                event: WindowEvent::MouseWheel {
+                    delta,
+                    ..
+                },
+                ..
+            } => {
+                //pos: push away
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                        let center = glam::Vec3::splat(0.0);
+                        let eye = app.camera.eye;
+
+                        let max_dist_center_geometry = glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS/2.0).length();
+
+                        // delta y of 1.0 means +10% distance from 'world surface' to camera
+                        let fraction = 1.0 + (y / 10.0);
+
+                        let current_distance = eye.distance(center);
+                        //TODO correct for current_distance < WORLD_RADIUS
+                        let current_distance_s = current_distance - WORLD_RADIUS;
+                        let new_distance_s = current_distance_s * fraction;
+
+                        let dir = eye - center;
+                        let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
+                        app.camera.eye = new_eye;
+
+                        app.camera.near = ((new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3) as f64).max(0.0);
+                        app.camera.far = (new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3) as f64;
+                    }
+                    _ => {}
+
+                }
             }
             _ => {}
         }

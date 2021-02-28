@@ -16,10 +16,13 @@ vec3 normal(vec3 pos) {
   return normalize(cross(fdx, fdy));
 }
 
-void mainImage( out vec4 fragColor, in vec2 fragCoord )
+void mainImage( out vec4 fragColor, in vec3 fragCoord )
 {
     // Normalized pixel coordinates (from 0 to 1)
-    vec2 uv = fragCoord/iResolution.xy;
+    // fragColor = vec4(-gl_FragDepth, -gl_FragDepth, -gl_FragDepth, 1.0);
+    // vec3 col = vec3(1.0-fragCoord.z) ;/// 80000000.0;
+    // fragColor = vec4(col, 1.0);
+    vec2 uv = fragCoord.xy/iResolution.xy;
 
     // Time varying pixel color
     vec3 col = 0.5 + 0.5*cos(iTime+uv.xyx+vec3(0,2,4));
@@ -32,5 +35,5 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 }
 
 void main() {
-    mainImage(outColor, vec2(gl_FragCoord.x, gl_FragCoord.y));
+    mainImage(outColor, gl_FragCoord.xyz);
 }
