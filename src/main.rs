@@ -8,6 +8,8 @@ extern crate shaderc;
 extern crate wgpu;
 extern crate winit;
 
+mod icosphere;
+
 mod simple_error;
 use simple_error::*;
 
@@ -69,26 +71,26 @@ fn vertex(pos: [f32; 4]) -> Vertex {
     Vertex { _pos: pos }
 }
 
-fn create_model_vertices(half: f64) -> (Vec<Vertex>, Vec<u16>) {
+#[allow(dead_code)]
+fn create_cube(half: f64) -> (Vec<Vertex>, Vec<u16>) {
     let half = half as f32;
-    let quarter = half / 2.0;
     let vertex_data = vec![
         //front left lower
-        vertex([half, -half, -quarter, 1.0]),
+        vertex([half, -half, -half, 1.0]),
         //front right lower
-        vertex([half, half, -quarter, 1.0]),
+        vertex([half, half, - half, 1.0]),
         //back right lower
-        vertex([-half, half, -quarter, 1.0]),
+        vertex([-half, half, - half, 1.0]),
         //back left lower
-        vertex([-half, -half, -quarter, 1.0]),
+        vertex([-half, -half, - half, 1.0]),
         //front left upper
-        vertex([half, -half, quarter, 1.0]),
+        vertex([half, -half,  half, 1.0]),
         //front right upper
-        vertex([half, half, quarter, 1.0]),
+        vertex([half, half,  half, 1.0]),
         //back right upper
-        vertex([-half, half, quarter, 1.0]),
+        vertex([-half, half,  half, 1.0]),
         //back left upper
-        vertex([-half, -half, quarter, 1.0]),
+        vertex([-half, -half,  half, 1.0]),
     ];
 
     let index_data = vec![
@@ -99,6 +101,20 @@ fn create_model_vertices(half: f64) -> (Vec<Vertex>, Vec<u16>) {
         3, 0, 4, 3, 4, 7, //left plane
         4, 5, 6, 4, 6, 7, //top plane
     ];
+
+    (vertex_data, index_data)
+}
+
+fn create_ico_sphere(half: f64) -> (Vec<Vertex>, Vec<u16>) {
+    let half = half as f32;
+
+    let (vertices, indices, _uvs) = icosphere::create(4, half);
+
+    let vertex_data = vertices.into_iter().map( |v| {
+        vertex([v.x, v.y, v.z, 1.0])
+    }).collect();
+
+    let index_data = indices.into_iter().map(|i| i as u16).collect();
 
     (vertex_data, index_data)
 }
@@ -268,7 +284,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     println!("Device: {:?}", device);
 
     //setup data
-    let (vertices, indices) = create_model_vertices(WORLD_RADIUS as f64);
+    let (vertices, indices) = create_ico_sphere(WORLD_RADIUS as f64);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -427,16 +443,12 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             start_time: SystemTime::now(),
             triangle_color: [1.0, 0.0, 0.0, 1.0],
             camera: Camera {
-                eye: glam::Vec3::new(
-                    6.0 * WORLD_RADIUS,
-                    6.0 * WORLD_RADIUS,
-                    0.0 * WORLD_RADIUS,
-                ),
+                eye: glam::Vec3::new(6.0 * WORLD_RADIUS, 6.0 * WORLD_RADIUS, 0.0 * WORLD_RADIUS),
                 fov_y_radians: PI / 4.0,
                 near: 5.0 * WORLD_RADIUS as f64,
                 far: 7.0 * WORLD_RADIUS as f64,
             },
-            demo_window_open: true,
+            demo_window_open: false,
         },
         Gui {
             imgui,
@@ -469,25 +481,39 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             app.camera.eye.x / WORLD_RADIUS,
             app.camera.eye.y / WORLD_RADIUS,
             app.camera.eye.z / WORLD_RADIUS,
-            (app.camera.near as f32/ WORLD_RADIUS),
-            (app.camera.far as f32/ WORLD_RADIUS),
-
+            (app.camera.near as f32 / WORLD_RADIUS),
+            (app.camera.far as f32 / WORLD_RADIUS),
         ];
 
         let window = imgui::Window::new(im_str!("Hello world"));
         // let current_shader = context.current_shader.as_ref();
         window
             .position([0.0, 0.0], Condition::FirstUseEver)
-            .size([400.0, 80.0], Condition::FirstUseEver)
+            .size([400.0, 400.0], Condition::FirstUseEver)
             .build(&ui, || {
                 ui.text(im_str!("Text"));
                 reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
                 ui.text(im_str!("Camera"));
-                imgui::Drag::new(im_str!("eye_x")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[0]);
-                imgui::Drag::new(im_str!("eye_y")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[1]);
-                imgui::Drag::new(im_str!("eye_z")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[2]);
-                imgui::Drag::new(im_str!("near")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[3]);
-                imgui::Drag::new(im_str!("far")).range(0.0..=20.0).speed(0.05).build(&ui, &mut t[4]);
+                imgui::Drag::new(im_str!("eye_x"))
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .build(&ui, &mut t[0]);
+                imgui::Drag::new(im_str!("eye_y"))
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .build(&ui, &mut t[1]);
+                imgui::Drag::new(im_str!("eye_z"))
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .build(&ui, &mut t[2]);
+                imgui::Drag::new(im_str!("near"))
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .build(&ui, &mut t[3]);
+                imgui::Drag::new(im_str!("far"))
+                    .range(0.0..=20.0)
+                    .speed(0.05)
+                    .build(&ui, &mut t[4]);
 
                 ui.checkbox(im_str!("demo"), &mut app.demo_window_open);
             });
@@ -684,10 +710,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
-                event: WindowEvent::MouseWheel {
-                    delta,
-                    ..
-                },
+                event: WindowEvent::MouseWheel { delta, .. },
                 ..
             } => {
                 //pos: push away
@@ -696,7 +719,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         let center = glam::Vec3::splat(0.0);
                         let eye = app.camera.eye;
 
-                        let max_dist_center_geometry = glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS/2.0).length();
+                        let max_dist_center_geometry = WORLD_RADIUS;
+                            // glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS / 2.0)
+                            //     .length();
 
                         // delta y of 1.0 means +10% distance from 'world surface' to camera
                         let fraction = 1.0 + (y / 10.0);
@@ -710,11 +735,15 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
                         app.camera.eye = new_eye;
 
-                        app.camera.near = ((new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3) as f64).max(0.0);
-                        app.camera.far = (new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3) as f64;
+                        app.camera.near = ((new_distance_s + WORLD_RADIUS
+                            - max_dist_center_geometry as f32
+                            - 1e3) as f64)
+                            .max(0.0);
+                        app.camera.far =
+                            (new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3)
+                                as f64;
                     }
                     _ => {}
-
                 }
             }
             _ => {}
