@@ -78,19 +78,19 @@ fn create_cube(half: f64) -> (Vec<Vertex>, Vec<u16>) {
         //front left lower
         vertex([half, -half, -half, 1.0]),
         //front right lower
-        vertex([half, half, - half, 1.0]),
+        vertex([half, half, -half, 1.0]),
         //back right lower
-        vertex([-half, half, - half, 1.0]),
+        vertex([-half, half, -half, 1.0]),
         //back left lower
-        vertex([-half, -half, - half, 1.0]),
+        vertex([-half, -half, -half, 1.0]),
         //front left upper
-        vertex([half, -half,  half, 1.0]),
+        vertex([half, -half, half, 1.0]),
         //front right upper
-        vertex([half, half,  half, 1.0]),
+        vertex([half, half, half, 1.0]),
         //back right upper
-        vertex([-half, half,  half, 1.0]),
+        vertex([-half, half, half, 1.0]),
         //back left upper
-        vertex([-half, -half,  half, 1.0]),
+        vertex([-half, -half, half, 1.0]),
     ];
 
     let index_data = vec![
@@ -105,14 +105,15 @@ fn create_cube(half: f64) -> (Vec<Vertex>, Vec<u16>) {
     (vertex_data, index_data)
 }
 
-fn create_ico_sphere(half: f64) -> (Vec<Vertex>, Vec<u16>) {
+fn create_ico_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
     let half = half as f32;
 
-    let (vertices, indices, _uvs) = icosphere::create(4, half);
+    let (vertices, indices, _uvs) = icosphere::create(subdivisions as u8, half);
 
-    let vertex_data = vertices.into_iter().map( |v| {
-        vertex([v.x, v.y, v.z, 1.0])
-    }).collect();
+    let vertex_data = vertices
+        .into_iter()
+        .map(|v| vertex([v.x, v.y, v.z, 1.0]))
+        .collect();
 
     let index_data = indices.into_iter().map(|i| i as u16).collect();
 
@@ -136,6 +137,7 @@ struct App {
     triangle_color: [f32; 4],
     camera: Camera,
     demo_window_open: bool,
+    subdivisions: usize,
 }
 
 struct RenderContext {
@@ -283,8 +285,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     println!("Adapter: {:?}", adapter.get_info());
     println!("Device: {:?}", device);
 
+    let subdivisions = 4;
     //setup data
-    let (vertices, indices) = create_ico_sphere(WORLD_RADIUS as f64);
+    let (vertices, indices) = create_ico_sphere(subdivisions, WORLD_RADIUS as f64);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -449,6 +452,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 far: 7.0 * WORLD_RADIUS as f64,
             },
             demo_window_open: false,
+            subdivisions,
         },
         Gui {
             imgui,
@@ -475,6 +479,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let ui = imgui.frame();
 
     let mut reload_shaders = false;
+    let mut reload_vertex_buffer = false;
     //draw ui
     {
         let mut t = [
@@ -515,6 +520,15 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     .speed(0.05)
                     .build(&ui, &mut t[4]);
 
+                let mut s = app.subdivisions as i32;
+                use std::convert::TryInto;
+
+                reload_vertex_buffer =
+                    imgui::InputInt::new(&ui, im_str!("subdivisions"), &mut s).build();
+                if reload_vertex_buffer && s > 0 {
+                    app.subdivisions = s.try_into().unwrap_or(app.subdivisions);
+                    println!("subs changed: {}", app.subdivisions);
+                }
                 ui.checkbox(im_str!("demo"), &mut app.demo_window_open);
             });
 
@@ -527,6 +541,27 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         app.camera.eye.z = t[2] * WORLD_RADIUS;
         app.camera.near = t[3] as f64 * WORLD_RADIUS as f64;
         app.camera.far = t[4] as f64 * WORLD_RADIUS as f64;
+    }
+
+    if reload_vertex_buffer {
+        let (vertex_data, index_data) = create_ico_sphere(app.subdivisions, WORLD_RADIUS as f64);
+        context.vertex_buffer =
+            context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&vertex_data),
+                    usage: wgpu::BufferUsage::VERTEX,
+                });
+        context.index_buffer =
+            context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&index_data),
+                    usage: wgpu::BufferUsage::INDEX,
+                });
+        context.index_count = index_data.len() as u32;
     }
 
     if reload_shaders {
@@ -671,6 +706,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 event: WindowEvent::Resized(size),
                 ..
             } => {
+                println!("Resized: {:?}", size);
                 context.swap_chain_descriptor.width = size.width;
                 context.swap_chain_descriptor.height = size.height;
                 context.swap_chain = context
@@ -720,8 +756,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         let eye = app.camera.eye;
 
                         let max_dist_center_geometry = WORLD_RADIUS;
-                            // glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS / 2.0)
-                            //     .length();
+                        // glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS / 2.0)
+                        //     .length();
 
                         // delta y of 1.0 means +10% distance from 'world surface' to camera
                         let fraction = 1.0 + (y / 10.0);
