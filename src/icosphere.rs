@@ -1,94 +1,78 @@
 use glam::*;
 
-
-pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>)
-{
-    let nn = n as usize * 4;
-    let vertex_num = (nn * nn / 16) * 24;
+pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
+    let n = n as usize;
+    let vertex_num = n * n * 24;
     let mut vertices: Vec<Vec3> = Vec::with_capacity(vertex_num as usize);
     let mut triangles = Vec::with_capacity(vertex_num as usize);
 
     let init_vectors = [
         // 0
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),   //the triangle vertical to (1,1,1)
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //the triangle vertical to (1,1,1)
         Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
         Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
         // 1
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),  //to (1,-1,1)
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (1,-1,1)
         Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
         Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
         // 2
-        Quat::from_xyzw( 0.0, 1.0, 0.0, 0.0),   //to (-1,1,1)
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (-1,1,1)
         Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw( 0.0, 0.0, 1.0, 0.0),
+        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
         // 3
-        Quat::from_xyzw( 0.0, -1.0, 0.0, 0.0),  //to (-1,-1,1)
-        Quat::from_xyzw( 0.0,  0.0, 1.0, 0.0),
-        Quat::from_xyzw(-1.0,  0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (-1,-1,1)
+        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         // 4
-        Quat::from_xyzw(0.0, 1.0,  0.0, 0.0),  //to (1,1,-1)
-        Quat::from_xyzw(1.0, 0.0,  0.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (1,1,-1)
+        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
         Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
         // 5
-        Quat::from_xyzw( 0.0, 1.0,  0.0, 0.0), //to (-1,1,-1)
-        Quat::from_xyzw( 0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0,  0.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (-1,1,-1)
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         // 6
-        Quat::from_xyzw( 0.0, -1.0,  0.0, 0.0), //to (-1,-1,-1)
-        Quat::from_xyzw(-1.0,  0.0,  0.0, 0.0),
-        Quat::from_xyzw( 0.0,  0.0, -1.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (-1,-1,-1)
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
         // 7
-        Quat::from_xyzw(0.0, -1.0,  0.0, 0.0),  //to (1,-1,-1)
-        Quat::from_xyzw(0.0,  0.0, -1.0, 0.0),
-        Quat::from_xyzw(1.0,  0.0,  0.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (1,-1,-1)
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
     ];
 
-    let mut j = 0;  //index on vectors[]
+    let mut j = 0; //index on vectors[]
 
     for i in 0..8 {
         let i = i * 3;
-    // }
-    // for (int i = 0; i < 24; i += 3)
-    // {
         /*
-            *                   c _________d
-            *    ^ /\           /\        /
-            *   / /  \         /  \      /
-            *  p /    \       /    \    /
-            *   /      \     /      \  /
-            *  /________\   /________\/
-            *     q->       a         b
-            */
+         *                   c _________d
+         *    ^ /\           /\        /
+         *   / /  \         /  \      /
+         *  p /    \       /    \    /
+         *   /      \     /      \  /
+         *  /________\   /________\/
+         *     q->       a         b
+         */
         for p in 0..n {
-
-        // }
-        // for (int p = 0; p < n; p++)
-        // {
             //edge index 1
             let edge_p1 = init_vectors[i].lerp(init_vectors[i + 2], p as f32 / n as f32);
             let edge_p2 = init_vectors[i + 1].lerp(init_vectors[i + 2], p as f32 / n as f32);
             let edge_p3 = init_vectors[i].lerp(init_vectors[i + 2], (p + 1) as f32 / n as f32);
             let edge_p4 = init_vectors[i + 1].lerp(init_vectors[i + 2], (p + 1) as f32 / n as f32);
 
-            for q in 0..(n-p) {
-
-            // }
-            // for (int q = 0; q < (n - p); q++)
-            // {
+            for q in 0..(n - p) {
                 //edge index 2
                 let a = edge_p1.lerp(edge_p2, q as f32 / (n - p) as f32);
                 let b = edge_p1.lerp(edge_p2, (q + 1) as f32 / (n - p) as f32);
-                let c: Quat;
-                let d: Quat;
-                if edge_p3 == edge_p4
-                {
-                    c = edge_p3;
-                    d = edge_p3;
-                }else
-                {
-                    c = edge_p3.lerp(edge_p4, q as f32 / (n - p - 1) as f32);
-                    d = edge_p3.lerp(edge_p4, (q + 1) as f32 / (n - p - 1) as f32);
-                }
+                let (c, d) = if edge_p3 == edge_p4 {
+                    (edge_p3, edge_p3)
+                } else {
+                    (
+                        edge_p3.lerp(edge_p4, q as f32 / (n - p - 1) as f32),
+                        edge_p3.lerp(edge_p4, (q + 1) as f32 / (n - p - 1) as f32),
+                    )
+                };
 
                 triangles.push(j);
                 vertices.push(Vec3::new(a.x, a.y, a.z));
@@ -100,10 +84,9 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>)
                 vertices.push(Vec3::new(c.x, c.y, c.z));
                 j = j + 1;
 
-                if q < n - p - 1
-                {
+                if q < n - p - 1 {
                     triangles.push(j);
-                    vertices.push( Vec3::new(c.x, c.y, c.z));
+                    vertices.push(Vec3::new(c.x, c.y, c.z));
                     j = j + 1;
 
                     triangles.push(j);
@@ -133,41 +116,29 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>)
     (vertices, triangles, uv)
 }
 
-fn create_uv(n: u8,  vertices: &Vec<Vec3>) -> Vec<Vec2>
-{
-    let nn = n as usize * 4;
-    let vertex_num = (nn * nn / 16) * 24;
+fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
+    let vertex_num = n * n * 24;
     let mut uv = Vec::with_capacity(vertex_num);
 
-    let tri = n as usize * n as usize;        // devided triangle count (1,4,9...)
-    let uv_limit = tri * 6;  // range of wrap UV.x
-    // Debug.Log("tri " + tri + " uvLimit " + uvLimit);
+    let tri = n * n; // devided triangle count (1,4,9...)
+    let uv_limit = tri * 6; // range of wrap UV.x
 
     for i in 0..vertices.len() {
-
-    // }
-    // for (int i = 0; i < vertices.Length; i++)
-    // {
         let v = vertices[i];
 
         let mut texture_coordinates = Vec2::splat(0.0);
-        if (v.x == 0.0)&&(i < uv_limit)
-        {
+        if (v.x == 0.0) && (i < uv_limit) {
             texture_coordinates.x = 1.0;
-        }
-        else
-        {
-
+        } else {
             texture_coordinates.x = v.x.atan2(v.z) / (-2.0 * std::f32::consts::PI);
         }
 
-        if texture_coordinates.x < 0.0
-        {
+        if texture_coordinates.x < 0.0 {
             texture_coordinates.x += 1.0;
         }
 
         texture_coordinates.y = v.y.asin() / std::f32::consts::PI + 0.5;
-        uv.push( texture_coordinates);
+        uv.push(texture_coordinates);
     }
 
     let tt = tri * 3;
@@ -181,7 +152,6 @@ fn create_uv(n: u8,  vertices: &Vec<Vec3>) -> Vec<Vec2>
     uv[7 * tt + 0].x = 0.625;
 
     uv
-
 }
 
 // static void CreateTangents(Mesh mesh)
@@ -238,7 +208,6 @@ fn create_uv(n: u8,  vertices: &Vec<Vec3>) -> Vec<Vec2>
 //         tan2[i2] += tdir;
 //         tan2[i3] += tdir;
 //     }
-
 
 //     for (int i = 0; i < vertexCount; ++i)
 //     {
