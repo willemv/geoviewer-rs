@@ -419,8 +419,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         label: Some("depth"),
     });
 
-    // let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
-    let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
+    let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
+    // let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
     let diffuse_file = std::io::BufReader::new(diffuse_file);
     let diffuse_image = image::load(diffuse_file, image::ImageFormat::Png)?;
     let diffuse_rgba = diffuse_image.into_rgba8();
