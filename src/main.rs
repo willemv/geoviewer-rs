@@ -102,9 +102,6 @@ fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>)
 
     let index_data: Vec<u16> = indices.into_iter().map(|i| i as u16).collect();
 
-    println!("Nr of vertices: {}", vertex_data.len());
-    println!("Nr of indices: {}", index_data.len());
-
     (vertex_data, index_data)
 }
 
@@ -247,7 +244,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     println!("Adapter: {:?}", adapter.get_info());
     println!("Device: {:?}", device);
 
-    let subdivisions = 4;
+    let subdivisions = 16;
     //setup data
     let (vertices, indices) = create_octo_sphere(subdivisions, WORLD_RADIUS as f64);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -801,7 +798,6 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 match *state {
                     winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
                     winit::event::ElementState::Released => app.controller.mouse_released(),
-                    _ => {}
 
                 }
             }
