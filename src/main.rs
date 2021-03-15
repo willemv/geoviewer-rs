@@ -11,6 +11,18 @@ extern crate shaderc;
 extern crate wgpu;
 extern crate winit;
 
+mod app;
+use app::*;
+
+mod camera;
+use camera::*;
+
+mod controller;
+use controller::*;
+
+mod model;
+use model::*;
+
 mod octosphere;
 
 mod simple_error;
@@ -30,7 +42,6 @@ use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-const WORLD_RADIUS: f32 = 6_371_000.0 / 2.0;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 #[repr(C)]
@@ -97,26 +108,6 @@ fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>)
     (vertex_data, index_data)
 }
 
-#[derive(Debug)]
-struct Data {
-    string: String,
-}
-
-impl Drop for Data {
-    fn drop(&mut self) {
-        println!("Dropping self: {}", self.string);
-    }
-}
-
-#[allow(dead_code)]
-struct App {
-    start_time: SystemTime,
-    triangle_color: [f32; 4],
-    camera: Camera,
-    demo_window_open: bool,
-    subdivisions: usize,
-}
-
 struct RenderContext {
     window: Window,
     surface: wgpu::Surface,
@@ -135,14 +126,6 @@ struct RenderContext {
     swap_chain: wgpu::SwapChain,
     queue: wgpu::Queue,
     depth_texture: wgpu::TextureView,
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Camera {
-    eye: glam::Vec3,
-    near: f64,
-    far: f64,
-    fov_y_radians: f64,
 }
 
 struct Gui {
@@ -374,6 +357,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         present_mode: wgpu::PresentMode::Mailbox,
     };
 
+    let aspect = window_size.width as f64 / window_size.height as f64;
     let swap_chain = device.create_swap_chain(&surface, &swap_chain_descriptor);
 
     //set up imgui
@@ -504,7 +488,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 fov_y_radians: PI / 4.0,
                 near: 0.25 * WORLD_RADIUS as f64,
                 far: 15.0 * WORLD_RADIUS as f64,
+                aspect,
             },
+            controller: Controller::new(),
             demo_window_open: false,
             subdivisions,
         },
@@ -633,7 +619,6 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
     let view_width = context.swap_chain_descriptor.width;
     let view_height = context.swap_chain_descriptor.height;
-    let aspect = (view_width as f32) / (view_height as f32);
 
     // camera position in world coordinates
 
@@ -645,12 +630,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let vertex_uniforms = VertexUniforms {
         model: glam::Mat4::identity(),
         view: view.as_f32(),
-        projection: glam::Mat4::perspective_rh(
-            app.camera.fov_y_radians as f32,
-            aspect,
-            app.camera.near as f32,
-            app.camera.far as f32,
-        ),
+        projection: app.camera.perspective_matrix(),
     };
 
     let vertex_uniforms_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -791,6 +771,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 });
                 context.depth_texture =
                     depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                app.camera.aspect = size.width as f64 / size.height as f64;
             }
             Event::MainEventsCleared => {
                 match render(&mut context, &mut app, &mut gui) {
@@ -809,38 +790,38 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
+                event: WindowEvent::MouseInput {
+                    button: winit::event::MouseButton::Left,
+                    ref state,
+                    ..
+                },
+                ..
+            } => {
+
+                match *state {
+                    winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
+                    winit::event::ElementState::Released => app.controller.mouse_released(),
+                    _ => {}
+
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved {
+                    position,
+                    ..
+                },
+                ..
+            } => {
+                app.controller.mouse_moved(position.x, position.y, &mut app.camera);
+            }
+            Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },
                 ..
             } => {
                 //pos: push away
                 match delta {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => {
-                        let center = glam::Vec3::splat(0.0);
-                        let eye = app.camera.eye;
-
-                        let max_dist_center_geometry = WORLD_RADIUS;
-                        // glam::Vec3::new(WORLD_RADIUS, WORLD_RADIUS, WORLD_RADIUS / 2.0)
-                        //     .length();
-
-                        // delta y of 1.0 means +10% distance from 'world surface' to camera
-                        let fraction = 1.0 + (y / 10.0);
-
-                        let current_distance = eye.distance(center);
-                        //TODO correct for current_distance < WORLD_RADIUS
-                        let current_distance_s = current_distance - WORLD_RADIUS;
-                        let new_distance_s = current_distance_s * fraction;
-
-                        let dir = eye - center;
-                        let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
-                        app.camera.eye = new_eye;
-
-                        app.camera.near = ((new_distance_s + WORLD_RADIUS
-                            - max_dist_center_geometry as f32
-                            - 1e3) as f64)
-                            .max(0.0);
-                        app.camera.far =
-                            (new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3)
-                                as f64;
+                        app.controller.scroll(y, &mut app.camera);
                     }
                     _ => {}
                 }
