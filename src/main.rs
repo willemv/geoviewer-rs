@@ -2,6 +2,7 @@ extern crate bytemuck;
 extern crate crossbeam;
 extern crate futures;
 extern crate glam;
+extern crate image;
 extern crate imgui;
 extern crate imgui_winit_support;
 extern crate shaderc;
@@ -62,60 +63,30 @@ unsafe impl Zeroable for FragmentUniforms {}
 #[derive(Clone, Copy)]
 struct Vertex {
     _pos: [f32; 4],
+    _tex: [f32; 2],
 }
 
 unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
 
-fn vertex(pos: [f32; 4]) -> Vertex {
-    Vertex { _pos: pos }
+fn vertex(pos: [f32; 4], tex: [f32; 2]) -> Vertex {
+    Vertex { _pos: pos, _tex: tex}
 }
 
-#[allow(dead_code)]
-fn create_cube(half: f64) -> (Vec<Vertex>, Vec<u16>) {
-    let half = half as f32;
-    let vertex_data = vec![
-        //front left lower
-        vertex([half, -half, -half, 1.0]),
-        //front right lower
-        vertex([half, half, -half, 1.0]),
-        //back right lower
-        vertex([-half, half, -half, 1.0]),
-        //back left lower
-        vertex([-half, -half, -half, 1.0]),
-        //front left upper
-        vertex([half, -half, half, 1.0]),
-        //front right upper
-        vertex([half, half, half, 1.0]),
-        //back right upper
-        vertex([-half, half, half, 1.0]),
-        //back left upper
-        vertex([-half, -half, half, 1.0]),
-    ];
-
-    let index_data = vec![
-        0, 2, 1, 0, 3, 2, //bottom plane
-        0, 1, 5, 0, 5, 4, //front plane
-        1, 2, 6, 1, 6, 5, //right plane
-        2, 3, 7, 2, 7, 6, //back plane
-        3, 0, 4, 3, 4, 7, //left plane
-        4, 5, 6, 4, 6, 7, //top plane
-    ];
-
-    (vertex_data, index_data)
-}
-
-fn create_ico_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
+fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
     let half = half as f32;
 
     let (vertices, indices, _uvs) = icosphere::create(subdivisions as u8, half);
 
-    let vertex_data = vertices
-        .into_iter()
-        .map(|v| vertex([v.x, v.y, v.z, 1.0]))
+    let vertex_data: Vec<Vertex> = vertices
+        .into_iter().zip(_uvs.into_iter())
+        .map(|(v,t) | vertex([v.x, v.y, v.z, 1.0], [t.x, t.y]))
         .collect();
 
-    let index_data = indices.into_iter().map(|i| i as u16).collect();
+    let index_data: Vec<u16> = indices.into_iter().map(|i| i as u16).collect();
+
+    println!("Nr of vertices: {}", vertex_data.len());
+    println!("Nr of indices: {}", index_data.len());
 
     (vertex_data, index_data)
 }
@@ -153,6 +124,8 @@ struct RenderContext {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
+    diffuse_texture_view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
     swap_chain: wgpu::SwapChain,
     queue: wgpu::Queue,
     depth_texture: wgpu::TextureView,
@@ -191,7 +164,7 @@ fn create_render_pipeline(
             entry_point: "main",
         }),
         rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-            front_face: wgpu::FrontFace::Cw,
+            front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::Back,
             ..Default::default()
         }),
@@ -200,7 +173,7 @@ fn create_render_pipeline(
         depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
             format: DEPTH_FORMAT,
             depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Greater,
+            depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilStateDescriptor::default(),
         }),
         vertex_state: wgpu::VertexStateDescriptor {
@@ -208,7 +181,7 @@ fn create_render_pipeline(
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
                 stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                 step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float4],
+                attributes: &wgpu::vertex_attr_array![0 => Float4, 1 => Float2],
             }],
         },
         sample_count: 1,
@@ -287,7 +260,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let subdivisions = 4;
     //setup data
-    let (vertices, indices) = create_ico_sphere(subdivisions, WORLD_RADIUS as f64);
+    let (vertices, indices) = create_octo_sphere(subdivisions, WORLD_RADIUS as f64);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -351,6 +324,24 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                     min_binding_size: wgpu::BufferSize::new(
                         std::mem::size_of::<FragmentUniforms>() as _,
                     ),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::SampledTexture {
+                    multisampled: false,
+                    dimension: wgpu::TextureViewDimension::D2,
+                    component_type: wgpu::TextureComponentType::Float ,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
                 },
                 count: None,
             },
@@ -424,6 +415,68 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         label: Some("depth"),
     });
 
+    let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
+    // let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
+    let diffuse_file = std::io::BufReader::new(diffuse_file);
+    let diffuse_image = image::load(diffuse_file, image::ImageFormat::Png)?;
+    let diffuse_rgba = diffuse_image.into_rgba8();
+
+    use image::GenericImageView;
+    let dimensions = diffuse_rgba.dimensions();
+
+    let texture_size = wgpu::Extent3d {
+        width: dimensions.0,
+        height: dimensions.1,
+        // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
+        depth: 1,
+    };
+    let diffuse_texture = device.create_texture(
+        &wgpu::TextureDescriptor {
+            size: texture_size,
+            mip_level_count: 1, // We'll talk about this a little later
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            // SAMPLED tells wgpu that we want to use this texture in shaders
+            // COPY_DST means that we want to copy data to this texture
+            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            label: Some("diffuse_texture"),
+        }
+    );
+
+    queue.write_texture(
+        // Tells wgpu where to copy the pixel data
+        wgpu::TextureCopyView {
+            texture: &diffuse_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        },
+        // The actual pixel data
+        &diffuse_rgba,
+        // The layout of the texture
+        wgpu::TextureDataLayout {
+            offset: 0,
+            bytes_per_row: 4 * dimensions.0,
+            rows_per_image: dimensions.1,
+        },
+        texture_size,
+    );
+
+    // We don't need to configure the texture view much, so let's
+    // let wgpu define it.
+    let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    });
+
+
+
     Ok((
         RenderContext {
             window,
@@ -439,6 +492,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             vertex_buffer,
             index_buffer,
             index_count,
+            diffuse_texture_view,
+            sampler: diffuse_sampler,
             queue,
             depth_texture: depth_texture.create_view(&wgpu::TextureViewDescriptor::default()),
         },
@@ -446,10 +501,10 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             start_time: SystemTime::now(),
             triangle_color: [1.0, 0.0, 0.0, 1.0],
             camera: Camera {
-                eye: glam::Vec3::new(6.0 * WORLD_RADIUS, 6.0 * WORLD_RADIUS, 0.0 * WORLD_RADIUS),
+                eye: glam::Vec3::new(6.0 * WORLD_RADIUS, 0.0 * WORLD_RADIUS, 1.2 * WORLD_RADIUS),
                 fov_y_radians: PI / 4.0,
-                near: 5.0 * WORLD_RADIUS as f64,
-                far: 7.0 * WORLD_RADIUS as f64,
+                near: 0.25 * WORLD_RADIUS as f64,
+                far: 15.0 * WORLD_RADIUS as f64,
             },
             demo_window_open: false,
             subdivisions,
@@ -500,15 +555,15 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
                 ui.text(im_str!("Camera"));
                 imgui::Drag::new(im_str!("eye_x"))
-                    .range(0.0..=20.0)
+                    .range(-20.0..=20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[0]);
                 imgui::Drag::new(im_str!("eye_y"))
-                    .range(0.0..=20.0)
+                    .range(-20.0..=20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[1]);
                 imgui::Drag::new(im_str!("eye_z"))
-                    .range(0.0..=20.0)
+                    .range(-20.0..=20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[2]);
                 imgui::Drag::new(im_str!("near"))
@@ -544,7 +599,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertex_data, index_data) = create_ico_sphere(app.subdivisions, WORLD_RADIUS as f64);
+        let (vertex_data, index_data) = create_octo_sphere(app.subdivisions, WORLD_RADIUS as f64);
         context.vertex_buffer =
             context
                 .device
@@ -587,10 +642,11 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let center = glam::DVec3::new(0.0, 0.0, 0.0);
     let up = glam::DVec3::new(0.0, 0.0, 1.0);
 
+    let view = glam::DMat4::look_at_rh(eye.as_f64(), center, up);
     let vertex_uniforms = VertexUniforms {
         model: glam::Mat4::identity(),
-        view: glam::DMat4::look_at_lh(eye.as_f64(), center, up).as_f32(),
-        projection: glam::Mat4::perspective_lh(
+        view: view.as_f32(),
+        projection: glam::Mat4::perspective_rh(
             app.camera.fov_y_radians as f32,
             aspect,
             app.camera.near as f32,
@@ -628,6 +684,14 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 binding: 1,
                 resource: wgpu::BindingResource::Buffer(fragment_uniform_buf.slice(..)),
             },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&context.diffuse_texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(&context.sampler),
+            },
         ],
     });
 
@@ -649,7 +713,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                 attachment: &context.depth_texture,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(-1.0),
+                    load: wgpu::LoadOp::Clear(f32::MAX),
                     store: false,
                 }),
                 stencil_ops: None,
