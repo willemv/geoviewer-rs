@@ -1,5 +1,11 @@
 use glam::*;
 
+// from https://github.com/kaiware007/IcoSphereCreator
+// that one is written with Unity's coordinate system in mind:
+// a left-handed coordinate system, with Y pointed up
+// our world coordinate system however, is right handed
+// and Z points up
+
 pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     let n = n as usize;
     let vertex_num = n * n * 24;
@@ -8,43 +14,42 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
 
     let init_vectors = [
         // 0
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //the triangle vertical to (1,1,1)
         Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
         // 1
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (1,-1,1)
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
+        Quat::from_xyzw(0.0,  0.0, -1.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         // 2
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (-1,1,1)
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
+        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
         // 3
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (-1,-1,1)
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
         // 4
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (1,1,-1)
+        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
         Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
         // 5
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), //to (-1,1,-1)
         Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        // 6
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (-1,-1,-1)
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        // 7
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0), //to (1,-1,-1)
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
         Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
+        // 6
+        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
+        // 7
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
+        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
+        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
     ];
 
     let mut j = 0; //index on vectors[]
 
-    for i in 0..8 {
-        let i = i * 3;
+    for i in (0..24).step_by(3) {
         /*
          *                   c _________d
          *    ^ /\           /\        /
@@ -100,16 +105,11 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
             }
         }
     }
-    // Mesh mesh = new Mesh();
-    // mesh.name = "IcoSphere";
 
     let uv = create_uv(n, &vertices);
     for i in 0..vertex_num {
         vertices[i] *= radius;
     }
-    // mesh.vertices = vertices;
-    // mesh.triangles = triangles;
-    // mesh.uv = uv;
     // mesh.RecalculateNormals();
     // CreateTangents(mesh);
 
@@ -120,24 +120,25 @@ fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
     let vertex_num = n * n * 24;
     let mut uv = Vec::with_capacity(vertex_num);
 
-    let tri = n * n; // devided triangle count (1,4,9...)
-    let uv_limit = tri * 6; // range of wrap UV.x
+    let tri = n * n; // divided triangle count (1,4,9...)
+    let uv_limit = tri * 18; // range of wrap UV.x
+
 
     for i in 0..vertices.len() {
         let v = vertices[i];
 
         let mut texture_coordinates = Vec2::splat(0.0);
-        if (v.x == 0.0) && (i < uv_limit) {
+        if (v.y == 0.0) && (i > uv_limit) {
             texture_coordinates.x = 1.0;
         } else {
-            texture_coordinates.x = v.x.atan2(v.z) / (-2.0 * std::f32::consts::PI);
+            texture_coordinates.x = v.y.atan2(v.x) / (2.0 * std::f32::consts::PI) - 0.5;
         }
 
         if texture_coordinates.x < 0.0 {
             texture_coordinates.x += 1.0;
         }
 
-        texture_coordinates.y = v.y.asin() / std::f32::consts::PI + 0.5;
+        texture_coordinates.y = 0.5 - v.z.asin() / std::f32::consts::PI;
         uv.push(texture_coordinates);
     }
 
