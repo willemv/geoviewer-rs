@@ -142,14 +142,14 @@ fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
     }
 
     let tt = tri * 3;
-    uv[0 * tt + 0].x = 0.875;
-    uv[1 * tt + 0].x = 0.875;
-    uv[2 * tt + 0].x = 0.125;
-    uv[3 * tt + 0].x = 0.125;
+    uv[0 * tt + 0].x = 0.125;
+    uv[1 * tt + 0].x = 0.125;
+    uv[2 * tt + 0].x = 0.375;
+    uv[3 * tt + 0].x = 0.375;
     uv[4 * tt + 0].x = 0.625;
-    uv[5 * tt + 0].x = 0.375;
-    uv[6 * tt + 0].x = 0.375;
-    uv[7 * tt + 0].x = 0.625;
+    uv[5 * tt + 0].x = 0.628;
+    uv[6 * tt + 0].x = 0.875;
+    uv[7 * tt + 0].x = 0.875;
 
     uv
 }

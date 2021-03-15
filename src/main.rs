@@ -1,3 +1,5 @@
+#![deny(clippy::pedantic)]
+
 extern crate bytemuck;
 extern crate crossbeam;
 extern crate futures;
@@ -9,7 +11,7 @@ extern crate shaderc;
 extern crate wgpu;
 extern crate winit;
 
-mod icosphere;
+mod octosphere;
 
 mod simple_error;
 use simple_error::*;
@@ -79,7 +81,7 @@ fn vertex(pos: [f32; 4], tex: [f32; 2]) -> Vertex {
 fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
     let half = half as f32;
 
-    let (vertices, indices, uvs) = icosphere::create(subdivisions as u8, half);
+    let (vertices, indices, uvs) = octosphere::create(subdivisions as u8, half);
 
     let vertex_data: Vec<Vertex> = vertices
         .into_iter()
@@ -417,13 +419,12 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         label: Some("depth"),
     });
 
-    let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
-    // let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
+    // let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
+    let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
     let diffuse_file = std::io::BufReader::new(diffuse_file);
     let diffuse_image = image::load(diffuse_file, image::ImageFormat::Png)?;
     let diffuse_rgba = diffuse_image.into_rgba8();
 
-    use image::GenericImageView;
     let dimensions = diffuse_rgba.dimensions();
 
     let texture_size = wgpu::Extent3d {
