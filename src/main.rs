@@ -70,17 +70,21 @@ unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
 
 fn vertex(pos: [f32; 4], tex: [f32; 2]) -> Vertex {
-    Vertex { _pos: pos, _tex: tex}
+    Vertex {
+        _pos: pos,
+        _tex: tex,
+    }
 }
 
 fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
     let half = half as f32;
 
-    let (vertices, indices, _uvs) = icosphere::create(subdivisions as u8, half);
+    let (vertices, indices, uvs) = icosphere::create(subdivisions as u8, half);
 
     let vertex_data: Vec<Vertex> = vertices
-        .into_iter().zip(_uvs.into_iter())
-        .map(|(v,t) | vertex([v.x, v.y, v.z, 1.0], [t.x, t.y]))
+        .into_iter()
+        .zip(uvs.into_iter())
+        .map(|(v, t)| vertex([v.x, v.y, v.z, 1.0], [t.x, t.y]))
         .collect();
 
     let index_data: Vec<u16> = indices.into_iter().map(|i| i as u16).collect();
@@ -333,16 +337,14 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 ty: wgpu::BindingType::SampledTexture {
                     multisampled: false,
                     dimension: wgpu::TextureViewDimension::D2,
-                    component_type: wgpu::TextureComponentType::Float ,
+                    component_type: wgpu::TextureComponentType::Float,
                 },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Sampler {
-                    comparison: false,
-                },
+                ty: wgpu::BindingType::Sampler { comparison: false },
                 count: None,
             },
         ],
@@ -430,19 +432,17 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
         depth: 1,
     };
-    let diffuse_texture = device.create_texture(
-        &wgpu::TextureDescriptor {
-            size: texture_size,
-            mip_level_count: 1, // We'll talk about this a little later
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            // SAMPLED tells wgpu that we want to use this texture in shaders
-            // COPY_DST means that we want to copy data to this texture
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-            label: Some("diffuse_texture"),
-        }
-    );
+    let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+        size: texture_size,
+        mip_level_count: 1, // We'll talk about this a little later
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        // SAMPLED tells wgpu that we want to use this texture in shaders
+        // COPY_DST means that we want to copy data to this texture
+        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+        label: Some("diffuse_texture"),
+    });
 
     queue.write_texture(
         // Tells wgpu where to copy the pixel data
@@ -474,8 +474,6 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     });
-
-
 
     Ok((
         RenderContext {

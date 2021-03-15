@@ -18,7 +18,7 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
         Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
         // 1
-        Quat::from_xyzw(0.0,  0.0, -1.0, 0.0),
+        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
         Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
         Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
         // 2
@@ -122,7 +122,6 @@ fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
 
     let tri = n * n; // divided triangle count (1,4,9...)
     let uv_limit = tri * 18; // range of wrap UV.x
-
 
     for i in 0..vertices.len() {
         let v = vertices[i];
