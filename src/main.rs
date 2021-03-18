@@ -42,6 +42,9 @@ use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
+
+//rgb(161, 203, 213);
+
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 #[repr(C)]
@@ -141,38 +144,35 @@ fn create_render_pipeline(
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("WGPU Pipeline"),
         layout: Some(pipeline_layout),
-        vertex_stage: wgpu::ProgrammableStageDescriptor {
+        vertex: wgpu::VertexState {
             module: vertex_shader_module,
             entry_point: "main",
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &wgpu::vertex_attr_array![0 => Float4, 1 => Float2],
+            }]
         },
-        fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+        fragment: Some(wgpu::FragmentState {
             module: fragment_shader_module,
             entry_point: "main",
+            targets: &[swap_chain_format.into()]
         }),
-        rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+        primitive: wgpu::PrimitiveState {
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::Back,
+            strip_index_format: Some(wgpu::IndexFormat::Uint16),
             ..Default::default()
-        }),
-        primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-        color_states: &[swap_chain_format.into()],
-        depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilStateDescriptor::default(),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+            clamp_depth: false,
         }),
-        vertex_state: wgpu::VertexStateDescriptor {
-            index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float4, 1 => Float2],
-            }],
-        },
-        sample_count: 1,
-        sample_mask: !0,
-        alpha_to_coverage_enabled: false,
+        multisample: wgpu::MultisampleState::default(),
     })
 }
 
@@ -181,10 +181,18 @@ fn prepare_new_shader(
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> Result<(wgpu::ShaderModule, wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
     let vs_artifact = compile_shader("src/shader.vert", shaderc::ShaderKind::Vertex)?;
-    let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_artifact.as_binary_u8()));
+    let vs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+        label: None,
+        source: wgpu::util::make_spirv(vs_artifact.as_binary_u8()),
+        flags: wgpu::ShaderFlags::empty()
+    });
 
     let fs_artifact = compile_shader("src/shader.frag", shaderc::ShaderKind::Fragment)?;
-    let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_artifact.as_binary_u8()));
+    let fs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+        label: None,
+        source: wgpu::util::make_spirv(fs_artifact.as_binary_u8()),
+        flags: wgpu::ShaderFlags::empty()
+    });
 
     let new = create_render_pipeline(
         device,
@@ -233,9 +241,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
+                label: None,
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits::default(),
-                shader_validation: true,
             },
             None,
         )
@@ -273,7 +281,11 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         "main",
         Some(&options),
     )?;
-    let vertex_shader = device.create_shader_module(wgpu::util::make_spirv(binary.as_binary_u8()));
+    let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+        label: None,
+        source: wgpu::util::make_spirv(binary.as_binary_u8()),
+        flags: wgpu::ShaderFlags::empty()
+    });
 
     let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
     let binary = compiler.compile_into_spirv(
@@ -284,7 +296,11 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         Some(&options),
     )?;
     let fragment_shader =
-        device.create_shader_module(wgpu::util::make_spirv(binary.as_binary_u8()));
+        device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+            label: None,
+            source: wgpu::util::make_spirv(binary.as_binary_u8()),
+            flags: wgpu::ShaderFlags::empty(),
+        });
 
     let swap_chain_format = wgpu::TextureFormat::Bgra8Unorm;
 
@@ -294,8 +310,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStage::VERTEX,
-                ty: wgpu::BindingType::UniformBuffer {
-                    dynamic: false,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
                     min_binding_size: wgpu::BufferSize::new(
                         std::mem::size_of::<VertexUniforms>() as _
                     ),
@@ -305,8 +322,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::UniformBuffer {
-                    dynamic: false,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
                     min_binding_size: wgpu::BufferSize::new(
                         std::mem::size_of::<FragmentUniforms>() as _,
                     ),
@@ -316,17 +334,17 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::SampledTexture {
+                ty: wgpu::BindingType::Texture {
                     multisampled: false,
-                    dimension: wgpu::TextureViewDimension::D2,
-                    component_type: wgpu::TextureComponentType::Float,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float{filterable: true},
                 },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Sampler { comparison: false },
+                ty: wgpu::BindingType::Sampler { comparison: false, filtering: true },
                 count: None,
             },
         ],
@@ -347,7 +365,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     );
 
     let swap_chain_descriptor = wgpu::SwapChainDescriptor {
-        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         format: swap_chain_format,
         width: window_size.width,
         height: window_size.height,
@@ -396,7 +414,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         label: Some("depth"),
     });
 
@@ -658,11 +676,19 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(vertex_uniforms_buf.slice(..)),
+                resource: wgpu::BindingResource::Buffer{
+                    buffer: &vertex_uniforms_buf,
+                    offset: 0,
+                    size: None
+                },
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Buffer(fragment_uniform_buf.slice(..)),
+                resource: wgpu::BindingResource::Buffer{
+                    buffer: &fragment_uniform_buf,
+                    offset: 0,
+                    size: None
+                },
             },
             wgpu::BindGroupEntry {
                 binding: 2,
@@ -682,6 +708,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         });
     {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &frame.view,
                 resolve_target: None,
@@ -701,12 +728,13 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         });
         render_pass.set_pipeline(&context.render_pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.set_index_buffer(context.index_buffer.slice(..));
+        render_pass.set_index_buffer(context.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.set_vertex_buffer(0, context.vertex_buffer.slice(..));
         render_pass.draw_indexed(0..context.index_count, 0, 0..1);
     }
     {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &frame.view,
                 resolve_target: None,
@@ -767,7 +795,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: DEPTH_FORMAT,
-                    usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+                    usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
                     label: None,
                 });
                 context.depth_texture =
