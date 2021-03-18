@@ -28,10 +28,10 @@ mod octosphere;
 mod simple_error;
 use simple_error::*;
 
-use std::error::Error;
 use std::f64::consts::PI;
 use std::mem;
 use std::time::SystemTime;
+use std::{error::Error, io::BufRead};
 
 use bytemuck::{Pod, Zeroable};
 use imgui::*;
@@ -401,9 +401,13 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     });
 
     let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
+    // let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_720x360.jpg")?;
     // let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
-    let diffuse_file = std::io::BufReader::new(diffuse_file);
-    let diffuse_image = image::load(diffuse_file, image::ImageFormat::Png)?;
+    let mut diffuse_file = std::io::BufReader::new(diffuse_file);
+    //call fill_buff without the corresponding consume, to peek the initial bytes of the file and guess the format
+    let header = diffuse_file.fill_buf()?;
+    let format = image::guess_format(header)?;
+    let diffuse_image = image::load(diffuse_file, format)?;
     let diffuse_rgba = diffuse_image.into_rgba8();
 
     let dimensions = diffuse_rgba.dimensions();
@@ -787,28 +791,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {
-                event: WindowEvent::MouseInput {
-                    button: winit::event::MouseButton::Left,
-                    ref state,
-                    ..
-                },
+                event:
+                    WindowEvent::MouseInput {
+                        button: winit::event::MouseButton::Left,
+                        ref state,
+                        ..
+                    },
                 ..
-            } => {
-
-                match *state {
-                    winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
-                    winit::event::ElementState::Released => app.controller.mouse_released(),
-
-                }
-            }
+            } => match *state {
+                winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
+                winit::event::ElementState::Released => app.controller.mouse_released(),
+            },
             Event::WindowEvent {
-                event: WindowEvent::CursorMoved {
-                    position,
-                    ..
-                },
+                event: WindowEvent::CursorMoved { position, .. },
                 ..
             } => {
-                app.controller.mouse_moved(position.x, position.y, &mut app.camera);
+                app.controller
+                    .mouse_moved(position.x, position.y, &mut app.camera);
             }
             Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },

@@ -11,11 +11,6 @@ pub struct Camera {
 
 impl Camera {
     pub fn perspective_matrix(&self) -> glam::Mat4 {
-        glam::DMat4::perspective_rh(
-            self.fov_y_radians,
-            self.aspect,
-            self.near,
-            self.far,
-        ).as_f32()
+        glam::DMat4::perspective_rh(self.fov_y_radians, self.aspect, self.near, self.far).as_f32()
     }
 }
