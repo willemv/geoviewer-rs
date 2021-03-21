@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 winit = "0.24"
 wgpu = "*"
-futures = "0.3"
 imgui = "*"
 imgui-wgpu = "*"
 shaderc = "*"
@@ -18,3 +17,7 @@ bytemuck = "*"
 crossbeam = "*"
 glam = "*"
 image = "*"
+
+[dependencies.futures]
+version = "*"
+features = ["executor", "thread-pool"]

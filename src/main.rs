@@ -11,6 +11,8 @@ extern crate shaderc;
 extern crate wgpu;
 extern crate winit;
 
+mod terrain;
+
 mod app;
 use app::*;
 
@@ -30,8 +32,9 @@ use simple_error::*;
 
 use std::f64::consts::PI;
 use std::mem;
+use std::sync::Arc;
 use std::time::SystemTime;
-use std::{error::Error, io::BufRead};
+use std::error::Error;
 
 use bytemuck::{Pod, Zeroable};
 use imgui::*;
@@ -41,9 +44,6 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
-
-
-//rgb(161, 203, 213);
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -111,7 +111,7 @@ fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>)
 struct RenderContext {
     window: Window,
     surface: wgpu::Surface,
-    device: wgpu::Device,
+    device: Arc<wgpu::Device>,
     vertex_shader: wgpu::ShaderModule,
     fragment_shader: wgpu::ShaderModule,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -121,10 +121,10 @@ struct RenderContext {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
-    diffuse_texture_view: wgpu::TextureView,
+    async_texture: terrain::AsyncTexture,
     sampler: wgpu::Sampler,
     swap_chain: wgpu::SwapChain,
-    queue: wgpu::Queue,
+    queue: Arc<wgpu::Queue>,
     depth_texture: wgpu::TextureView,
 }
 
@@ -211,8 +211,6 @@ fn compile_shader(
     let shader_text = std::fs::read_to_string(path)?;
     let mut compiler = shaderc::Compiler::new()
         .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
-    // let options = shaderc::CompileOptions::new()
-    // .ok_or_else(|| SimpleError::new("Could not create compile options"))?;
     let binary = compiler.compile_into_spirv(&shader_text, kind, path, "main", None)?;
     Ok(binary)
 }
@@ -251,6 +249,9 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     println!("Adapter: {:?}", adapter.get_info());
     println!("Device: {:?}", device);
+
+    let device = std::sync::Arc::new(device);
+    let queue = std::sync::Arc::new(queue);
 
     let subdivisions = 16;
     //setup data
@@ -418,62 +419,20 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         label: Some("depth"),
     });
 
-    let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_3600x1800.png")?;
-    // let diffuse_file = std::fs::File::open("assets/eo_base_2020_clean_720x360.jpg")?;
-    // let diffuse_file = std::fs::File::open("assets/UVCheck.png")?;
-    let mut diffuse_file = std::io::BufReader::new(diffuse_file);
-    //call fill_buff without the corresponding consume, to peek the initial bytes of the file and guess the format
-    let header = diffuse_file.fill_buf()?;
-    let format = image::guess_format(header)?;
-    let diffuse_image = image::load(diffuse_file, format)?;
-    let diffuse_rgba = diffuse_image.into_rgba8();
 
-    let dimensions = diffuse_rgba.dimensions();
+    let async_texture = terrain::AsyncTexture::new(device.clone(), queue.clone());
 
-    let texture_size = wgpu::Extent3d {
-        width: dimensions.0,
-        height: dimensions.1,
-        // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
-        depth: 1,
-    };
-    let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-        size: texture_size,
-        mip_level_count: 1, // We'll talk about this a little later
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        // SAMPLED tells wgpu that we want to use this texture in shaders
-        // COPY_DST means that we want to copy data to this texture
-        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-        label: Some("diffuse_texture"),
-    });
 
-    queue.write_texture(
-        // Tells wgpu where to copy the pixel data
-        wgpu::TextureCopyView {
-            texture: &diffuse_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-        },
-        // The actual pixel data
-        &diffuse_rgba,
-        // The layout of the texture
-        wgpu::TextureDataLayout {
-            offset: 0,
-            bytes_per_row: 4 * dimensions.0,
-            rows_per_image: dimensions.1,
-        },
-        texture_size,
-    );
+
 
     // We don't need to configure the texture view much, so let's
     // let wgpu define it.
-    let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    // let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
     let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
+        mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
@@ -494,7 +453,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             vertex_buffer,
             index_buffer,
             index_count,
-            diffuse_texture_view,
+            async_texture,
             sampler: diffuse_sampler,
             queue,
             depth_texture: depth_texture.create_view(&wgpu::TextureViewDescriptor::default()),
@@ -539,6 +498,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
     let mut reload_shaders = false;
     let mut reload_vertex_buffer = false;
+    let mut reload_texture = false;
     //draw ui
     {
         let mut t = [
@@ -557,6 +517,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             .build(&ui, || {
                 ui.text(im_str!("Text"));
                 reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
+                reload_texture = ui.button(im_str!("Reload texture"), [0.0, 0.0]);
                 ui.text(im_str!("Camera"));
                 imgui::Drag::new(im_str!("eye_x"))
                     .range(-20.0..=20.0)
@@ -623,6 +584,14 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         context.index_count = index_data.len() as u32;
     }
 
+    if reload_texture {
+        match context.async_texture.init(&context.device, &context.queue) {
+            // Ok(texture_view) => context.diffuse_texture_view = texture_view,
+            Err(e) => println!("error loading texture: {}", e),
+            _ => {}
+        }
+    }
+
     if reload_shaders {
         match prepare_new_shader(&context.device, &context.pipeline_layout) {
             Ok((vs_shader, fs_shader, pipeline)) => {
@@ -630,8 +599,8 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 context.fragment_shader = fs_shader;
                 context.render_pipeline = pipeline;
             }
-            Err(ref err) => {
-                println!("Error compiling shader: {}", *err);
+            Err(err) => {
+                println!("Error compiling shader: {}", err);
             }
         }
     }
@@ -647,7 +616,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
     let view = glam::DMat4::look_at_rh(eye.as_f64(), center, up);
     let vertex_uniforms = VertexUniforms {
-        model: glam::Mat4::identity(),
+        model: glam::Mat4::IDENTITY,
         view: view.as_f32(),
         projection: app.camera.perspective_matrix(),
     };
@@ -692,7 +661,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::TextureView(&context.diffuse_texture_view),
+                resource: wgpu::BindingResource::TextureView(context.async_texture.get_texture()),
             },
             wgpu::BindGroupEntry {
                 binding: 3,
@@ -752,8 +721,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 &context.queue,
                 &context.device,
                 &mut render_pass,
-            )
-            .map_err(|_| SimpleError::new("Error rendering imgui"))?;
+            )?;
     }
 
     context.queue.submit(Some(encoder.finish()));
