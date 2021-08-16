@@ -3,7 +3,7 @@ use std;
 use std::error::Error;
 use std::io::BufRead;
 use std::sync::Arc;
-use wgpu::{self, TextureView, TextureViewDescriptor};
+use wgpu::TextureView;
 
 use futures;
 use futures::channel::oneshot::*;
@@ -16,10 +16,12 @@ pub struct AsyncTexture {
     future_texture: Option<Receiver<TextureResult>>,
 }
 
-fn load_texture(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> TextureResult {
+fn load_texture(
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    filename: &str,
+) -> TextureResult {
     println!("Opening file");
-    let filename = "assets/eo_base_2020_clean_3600x1800.png";
-    let filename = "assets/eo_base_2020_clean_720x360.jpg";
     let diffuse_file = std::fs::File::open(filename)?;
     println!("Reading file");
     let mut diffuse_file = std::io::BufReader::new(diffuse_file);
@@ -118,9 +120,34 @@ impl AsyncTexture {
             texture_size,
         );
 
+        let mut result = AsyncTexture {
+            texture_view: diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            future_texture: None,
+        };
+
+        result.start_loading(device, queue, "assets/eo_base_2020_clean_720x360.jpg");
+
+        result
+    }
+
+    pub fn load_hi_res_texture(
+        &mut self,
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.start_loading(device, queue, "assets/eo_base_2020_clean_3600x1800.png");
+        Ok(())
+    }
+
+    fn start_loading(
+        &mut self,
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+        filename: &'static str,
+    ) {
         let (sender, receiver) = channel();
-        let f = async {
-            let t = load_texture(device, queue);
+        let f = async move {
+            let t = load_texture(device, queue, filename);
             if let Err(_) = sender.send(t) {
                 println!("Unable to send texture result to paint queue");
             }
@@ -128,67 +155,7 @@ impl AsyncTexture {
         let tp = ThreadPool::new().expect("msg");
         tp.spawn_ok(f);
 
-        AsyncTexture {
-            texture_view: diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            future_texture: Some(receiver),
-        }
-    }
-
-    pub fn init(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Result<(), Box<dyn Error>> {
-        let filename = "assets/eo_base_2020_clean_3600x1800.png";
-        // let filename = "assets/eo_base_2020_clean_720x360.jpg";
-        let diffuse_file = std::fs::File::open(filename)?;
-        let mut diffuse_file = std::io::BufReader::new(diffuse_file);
-        //call fill_buff without the corresponding consume, to peek the initial bytes of the file and guess the format
-        let header = diffuse_file.fill_buf()?;
-        let format = image::guess_format(header)?;
-        let diffuse_image = image::load(diffuse_file, format)?;
-        let diffuse_rgba = diffuse_image.into_rgba8();
-
-        let dimensions = diffuse_rgba.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
-            depth: 1,
-        };
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: texture_size,
-            mip_level_count: 1, // We'll talk about this a little later
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            // SAMPLED tells wgpu that we want to use this texture in shaders
-            // COPY_DST means that we want to copy data to this texture
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-            label: Some("diffuse_texture"),
-        });
-
-        queue.write_texture(
-            // Tells wgpu where to copy the pixel data
-            wgpu::TextureCopyView {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            // The actual pixel data
-            &diffuse_rgba,
-            // The layout of the texture
-            wgpu::TextureDataLayout {
-                offset: 0,
-                bytes_per_row: 4 * dimensions.0,
-                rows_per_image: dimensions.1,
-            },
-            texture_size,
-        );
-
-        self.texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
-        Ok(())
+        self.future_texture = Some(receiver);
     }
 
     pub fn get_texture(&mut self) -> &TextureView {

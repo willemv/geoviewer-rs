@@ -515,7 +515,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             .build(&ui, || {
                 ui.text(im_str!("Text"));
                 reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
-                reload_texture = ui.button(im_str!("Reload texture"), [0.0, 0.0]);
+                reload_texture = ui.button(im_str!("Hi-res texture"), [0.0, 0.0]);
                 ui.text(im_str!("Camera"));
                 imgui::Drag::new(im_str!("eye_x"))
                     .range(-20.0..=20.0)
@@ -583,7 +583,10 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_texture {
-        match context.async_texture.init(&context.device, &context.queue) {
+        match context
+            .async_texture
+            .load_hi_res_texture(context.device.clone(), context.queue.clone())
+        {
             // Ok(texture_view) => context.diffuse_texture_view = texture_view,
             Err(e) => println!("error loading texture: {}", e),
             _ => {}
