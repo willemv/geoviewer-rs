@@ -30,11 +30,11 @@ mod octosphere;
 mod simple_error;
 use simple_error::*;
 
+use std::error::Error;
 use std::f64::consts::PI;
 use std::mem;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::error::Error;
 
 use bytemuck::{Pod, Zeroable};
 use imgui::*;
@@ -151,12 +151,12 @@ fn create_render_pipeline(
                 array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                 step_mode: wgpu::InputStepMode::Vertex,
                 attributes: &wgpu::vertex_attr_array![0 => Float4, 1 => Float2],
-            }]
+            }],
         },
         fragment: Some(wgpu::FragmentState {
             module: fragment_shader_module,
             entry_point: "main",
-            targets: &[swap_chain_format.into()]
+            targets: &[swap_chain_format.into()],
         }),
         primitive: wgpu::PrimitiveState {
             front_face: wgpu::FrontFace::Ccw,
@@ -181,17 +181,17 @@ fn prepare_new_shader(
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> Result<(wgpu::ShaderModule, wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
     let vs_artifact = compile_shader("src/shader.vert", shaderc::ShaderKind::Vertex)?;
-    let vs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+    let vs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(vs_artifact.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty()
+        flags: wgpu::ShaderFlags::empty(),
     });
 
     let fs_artifact = compile_shader("src/shader.frag", shaderc::ShaderKind::Fragment)?;
-    let fs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+    let fs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(fs_artifact.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty()
+        flags: wgpu::ShaderFlags::empty(),
     });
 
     let new = create_render_pipeline(
@@ -219,18 +219,18 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     //set up wgpu
     let window_size = window.inner_size();
 
-    let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+    let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN);
     let surface = unsafe { instance.create_surface(&window) };
 
     println!("Found these adapters:");
-    for adapter in instance.enumerate_adapters(wgpu::BackendBit::PRIMARY) {
+    for adapter in instance.enumerate_adapters(wgpu::BackendBit::VULKAN) {
         println!("  {:?}", adapter.get_info());
     }
     println!();
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: wgpu::PowerPreference::LowPower,
             compatible_surface: Some(&surface),
         })
         .await
@@ -282,10 +282,10 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         "main",
         Some(&options),
     )?;
-    let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor{
+    let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(binary.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty()
+        flags: wgpu::ShaderFlags::empty(),
     });
 
     let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
@@ -296,12 +296,11 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         "main",
         Some(&options),
     )?;
-    let fragment_shader =
-        device.create_shader_module(&wgpu::ShaderModuleDescriptor{
-            label: None,
-            source: wgpu::util::make_spirv(binary.as_binary_u8()),
-            flags: wgpu::ShaderFlags::empty(),
-        });
+    let fragment_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::util::make_spirv(binary.as_binary_u8()),
+        flags: wgpu::ShaderFlags::empty(),
+    });
 
     let swap_chain_format = wgpu::TextureFormat::Bgra8Unorm;
 
@@ -338,14 +337,17 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
                     view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float{filterable: true},
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
                 },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Sampler { comparison: false, filtering: true },
+                ty: wgpu::BindingType::Sampler {
+                    comparison: false,
+                    filtering: true,
+                },
                 count: None,
             },
         ],
@@ -419,11 +421,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         label: Some("depth"),
     });
 
-
     let async_texture = terrain::AsyncTexture::new(device.clone(), queue.clone());
-
-
-
 
     // We don't need to configure the texture view much, so let's
     // let wgpu define it.
@@ -645,18 +643,18 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer{
+                resource: wgpu::BindingResource::Buffer {
                     buffer: &vertex_uniforms_buf,
                     offset: 0,
-                    size: None
+                    size: None,
                 },
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Buffer{
+                resource: wgpu::BindingResource::Buffer {
                     buffer: &fragment_uniform_buf,
                     offset: 0,
-                    size: None
+                    size: None,
                 },
             },
             wgpu::BindGroupEntry {
@@ -715,13 +713,12 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             depth_stencil_attachment: None,
         });
 
-        gui.imgui_renderer
-            .render(
-                ui.render(),
-                &context.queue,
-                &context.device,
-                &mut render_pass,
-            )?;
+        gui.imgui_renderer.render(
+            ui.render(),
+            &context.queue,
+            &context.device,
+            &mut render_pass,
+        )?;
     }
 
     context.queue.submit(Some(encoder.finish()));

@@ -25,7 +25,7 @@ void mainImage( out vec4 fragColor, in vec3 fragCoord )
     vec3 normal = normal(viewPosition);
     float factor = abs(dot(normal, vec3(0.0, 0.0, 1.0)));
 
-    fragColor = texture(sampler2D(t_diffuse, s_diffuse), v_tex_coords);// * factor;
+    fragColor = texture(sampler2D(t_diffuse, s_diffuse), v_tex_coords) * factor;
 }
 
 void main() {
