@@ -7,12 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.24"
+winit = "0.25"
 wgpu = "*"
 imgui = "*"
 imgui-wgpu = "*"
 shaderc = "*"
-imgui-winit-support = "*"
 bytemuck = "*"
 crossbeam = "*"
 glam = "*"
@@ -21,3 +20,8 @@ image = "*"
 [dependencies.futures]
 version = "*"
 features = ["executor", "thread-pool"]
+
+[dependencies.imgui-winit-support]
+version = "0.7.1"
+features = ["winit-25"]
+default-features = false
