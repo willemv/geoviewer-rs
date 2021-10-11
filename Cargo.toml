@@ -12,7 +12,7 @@ winit = "0.25"
 wgpu = { version="*", features = ["spirv"] }
 imgui = "*"
 imgui-wgpu = "*"
-shaderc = "*"
+naga = "*"
 bytemuck = "*"
 crossbeam = "*"
 glam = "*"

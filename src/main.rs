@@ -7,7 +7,7 @@ extern crate glam;
 extern crate image;
 extern crate imgui;
 extern crate imgui_winit_support;
-extern crate shaderc;
+extern crate naga;
 extern crate wgpu;
 extern crate winit;
 
@@ -29,6 +29,7 @@ mod octosphere;
 
 mod simple_error;
 use simple_error::*;
+use wgpu::include_wgsl;
 
 use std::error::Error;
 use std::f64::consts::PI;
@@ -112,8 +113,7 @@ struct RenderContext {
     window: Window,
     surface: wgpu::Surface,
     device: Arc<wgpu::Device>,
-    vertex_shader: wgpu::ShaderModule,
-    fragment_shader: wgpu::ShaderModule,
+    shader: wgpu::ShaderModule,
     bind_group_layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
@@ -135,8 +135,7 @@ struct Gui {
 
 fn create_render_pipeline(
     device: &wgpu::Device,
-    vertex_shader_module: &wgpu::ShaderModule,
-    fragment_shader_module: &wgpu::ShaderModule,
+    shader_module: &wgpu::ShaderModule,
     pipeline_layout: &wgpu::PipelineLayout,
     swap_chain_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
@@ -144,8 +143,8 @@ fn create_render_pipeline(
         label: Some("WGPU Pipeline"),
         layout: Some(pipeline_layout),
         vertex: wgpu::VertexState {
-            module: vertex_shader_module,
-            entry_point: "main",
+            module: shader_module,
+            entry_point: "vs_main",
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                 step_mode: wgpu::VertexStepMode::Vertex,
@@ -153,8 +152,8 @@ fn create_render_pipeline(
             }],
         },
         fragment: Some(wgpu::FragmentState {
-            module: fragment_shader_module,
-            entry_point: "main",
+            module: shader_module,
+            entry_point: "fs_main",
             targets: &[swap_chain_format.into()],
         }),
         primitive: wgpu::PrimitiveState {
@@ -177,38 +176,24 @@ fn create_render_pipeline(
 fn prepare_new_shader(
     device: &wgpu::Device,
     pipeline_layout: &wgpu::PipelineLayout,
-) -> Result<(wgpu::ShaderModule, wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
-    let vs_artifact = compile_shader("src/shader.vert", shaderc::ShaderKind::Vertex)?;
-    let vs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::util::make_spirv(vs_artifact.as_binary_u8()),
-    });
+) -> Result<(wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
+    let source = std::fs::read_to_string("src/geoviewer.wgsl")?;
+    // create_shader_module panics if there are wgsl compilation errors
+    // that really kills the interactivity, so parse with error checking first
+    naga::front::wgsl::parse_str(&source)?;
 
-    let fs_artifact = compile_shader("src/shader.frag", shaderc::ShaderKind::Fragment)?;
-    let fs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::util::make_spirv(fs_artifact.as_binary_u8()),
+    let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        label: Some("geoviewer.wgsl"),
+        source: wgpu::ShaderSource::Wgsl(source.into())
     });
 
     let new = create_render_pipeline(
         device,
-        &vs_module,
-        &fs_module,
+        &shader_module,
         pipeline_layout,
         wgpu::TextureFormat::Bgra8Unorm,
     );
-    Ok((vs_module, fs_module, new))
-}
-
-fn compile_shader(
-    path: &str,
-    kind: shaderc::ShaderKind,
-) -> Result<shaderc::CompilationArtifact, Box<dyn Error>> {
-    let shader_text = std::fs::read_to_string(path)?;
-    let mut compiler = shaderc::Compiler::new()
-        .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
-    let binary = compiler.compile_into_spirv(&shader_text, kind, path, "main", None)?;
-    Ok(binary)
+    Ok((shader_module, new))
 }
 
 async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Error>> {
@@ -265,36 +250,33 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     });
     let index_count = indices.len() as u32;
 
-    let vertex_shader_text = std::fs::read_to_string("src/shader.vert")?;
+    // let vertex_shader_text = std::fs::read_to_string("src/shader.vert")?;
 
-    let mut compiler = shaderc::Compiler::new()
-        .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
-    let options = shaderc::CompileOptions::new()
-        .ok_or_else(|| SimpleError::new("Could not create compile options"))?;
-    let binary = compiler.compile_into_spirv(
-        &vertex_shader_text,
-        shaderc::ShaderKind::Vertex,
-        "shader_vert",
-        "main",
-        Some(&options),
-    )?;
-    let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::util::make_spirv(binary.as_binary_u8()),
-    });
+    // let mut compiler = shaderc::Compiler::new()
+    //     .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
+    // let options = shaderc::CompileOptions::new()
+    //     .ok_or_else(|| SimpleError::new("Could not create compile options"))?;
+    // let binary = compiler.compile_into_spirv(
+    //     &vertex_shader_text,
+    //     shaderc::ShaderKind::Vertex,
+    //     "shader_vert",
+    //     "main",
+    //     Some(&options),
+    // )?;
+    // let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+    //     label: None,
+    //     source: wgpu::util::make_spirv(binary.as_binary_u8()),
+    // });
 
-    let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
-    let binary = compiler.compile_into_spirv(
-        &fragment_shader_text,
-        shaderc::ShaderKind::Fragment,
-        "shader.frag",
-        "main",
-        Some(&options),
-    )?;
-    let fragment_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::util::make_spirv(binary.as_binary_u8()),
-    });
+    // let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
+    // let binary = compiler.compile_into_spirv(
+    //     &fragment_shader_text,
+    //     shaderc::ShaderKind::Fragment,
+    //     "shader.frag",
+    //     "main",
+    //     Some(&options),
+    // )?;
+    let shader = device.create_shader_module(&include_wgsl!("geoviewer.wgsl"));
 
     let swap_chain_format = wgpu::TextureFormat::Bgra8Unorm;
 
@@ -355,8 +337,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let render_pipeline = create_render_pipeline(
         &device,
-        &vertex_shader,
-        &fragment_shader,
+        &shader,
         &pipeline_layout,
         swap_chain_format,
     );
@@ -435,8 +416,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             window,
             surface,
             device,
-            vertex_shader,
-            fragment_shader,
+            shader,
             pipeline_layout,
             bind_group_layout,
             render_pipeline,
@@ -588,9 +568,8 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
     if reload_shaders {
         match prepare_new_shader(&context.device, &context.pipeline_layout) {
-            Ok((vs_shader, fs_shader, pipeline)) => {
-                context.vertex_shader = vs_shader;
-                context.fragment_shader = fs_shader;
+            Ok((shader, pipeline)) => {
+                context.shader = shader;
                 context.render_pipeline = pipeline;
             }
             Err(err) => {
