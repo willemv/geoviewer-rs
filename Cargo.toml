@@ -3,12 +3,13 @@ name = "geoviewer"
 version = "0.1.0"
 authors = ["Willem Verstraeten <willem.verstraeten@gmail.com>"]
 edition = "2018"
+resolver="2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 winit = "0.25"
-wgpu = "*"
+wgpu = { version="*", features = ["spirv"] }
 imgui = "*"
 imgui-wgpu = "*"
 shaderc = "*"
@@ -22,6 +23,6 @@ version = "*"
 features = ["executor", "thread-pool"]
 
 [dependencies.imgui-winit-support]
-version = "0.7.1"
+version = "0.8.0"
 features = ["winit-25"]
 default-features = false

@@ -117,13 +117,12 @@ struct RenderContext {
     bind_group_layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
-    swap_chain_descriptor: wgpu::SwapChainDescriptor,
+    surface_configuration: wgpu::SurfaceConfiguration,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
     async_texture: terrain::AsyncTexture,
     sampler: wgpu::Sampler,
-    swap_chain: wgpu::SwapChain,
     queue: Arc<wgpu::Queue>,
     depth_texture: wgpu::TextureView,
 }
@@ -149,8 +148,8 @@ fn create_render_pipeline(
             entry_point: "main",
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float4, 1 => Float2],
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x2],
             }],
         },
         fragment: Some(wgpu::FragmentState {
@@ -160,8 +159,8 @@ fn create_render_pipeline(
         }),
         primitive: wgpu::PrimitiveState {
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: wgpu::CullMode::Back,
-            strip_index_format: Some(wgpu::IndexFormat::Uint16),
+            cull_mode: Some(wgpu::Face::Back),
+            // strip_index_format: None,
             ..Default::default()
         },
         depth_stencil: Some(wgpu::DepthStencilState {
@@ -170,7 +169,6 @@ fn create_render_pipeline(
             depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
-            clamp_depth: false,
         }),
         multisample: wgpu::MultisampleState::default(),
     })
@@ -184,14 +182,12 @@ fn prepare_new_shader(
     let vs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(vs_artifact.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty(),
     });
 
     let fs_artifact = compile_shader("src/shader.frag", shaderc::ShaderKind::Fragment)?;
     let fs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(fs_artifact.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty(),
     });
 
     let new = create_render_pipeline(
@@ -219,11 +215,11 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     //set up wgpu
     let window_size = window.inner_size();
 
-    let instance = wgpu::Instance::new(wgpu::BackendBit::VULKAN);
+    let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
     let surface = unsafe { instance.create_surface(&window) };
 
     println!("Found these adapters:");
-    for adapter in instance.enumerate_adapters(wgpu::BackendBit::VULKAN) {
+    for adapter in instance.enumerate_adapters(wgpu::Backends::VULKAN) {
         println!("  {:?}", adapter.get_info());
     }
     println!();
@@ -259,13 +255,13 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
-        usage: wgpu::BufferUsage::VERTEX,
+        usage: wgpu::BufferUsages::VERTEX,
     });
 
     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&indices),
-        usage: wgpu::BufferUsage::INDEX,
+        usage: wgpu::BufferUsages::INDEX,
     });
     let index_count = indices.len() as u32;
 
@@ -285,7 +281,6 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(binary.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty(),
     });
 
     let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
@@ -299,7 +294,6 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     let fragment_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::util::make_spirv(binary.as_binary_u8()),
-        flags: wgpu::ShaderFlags::empty(),
     });
 
     let swap_chain_format = wgpu::TextureFormat::Bgra8Unorm;
@@ -309,7 +303,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -321,7 +315,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
-                visibility: wgpu::ShaderStage::FRAGMENT,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -333,7 +327,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
-                visibility: wgpu::ShaderStage::FRAGMENT,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
                     view_dimension: wgpu::TextureViewDimension::D2,
@@ -343,7 +337,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
-                visibility: wgpu::ShaderStage::FRAGMENT,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler {
                     comparison: false,
                     filtering: true,
@@ -367,8 +361,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         swap_chain_format,
     );
 
-    let swap_chain_descriptor = wgpu::SwapChainDescriptor {
-        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+    let surface_configuration = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: swap_chain_format,
         width: window_size.width,
         height: window_size.height,
@@ -376,7 +370,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     };
 
     let aspect = window_size.width as f64 / window_size.height as f64;
-    let swap_chain = device.create_swap_chain(&surface, &swap_chain_descriptor);
+    surface.configure(&device, &surface_configuration);
 
     //set up imgui
     let hidpi_factor = window.scale_factor();
@@ -401,7 +395,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     //set up imgui_wgpu
     let renderer_config = imgui_wgpu::RendererConfig {
-        texture_format: swap_chain_descriptor.format,
+        texture_format: surface_configuration.format,
         ..Default::default()
     };
 
@@ -409,15 +403,15 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
         size: wgpu::Extent3d {
-            width: swap_chain_descriptor.width,
-            height: swap_chain_descriptor.height,
-            depth: 1,
+            width: surface_configuration.width,
+            height: surface_configuration.height,
+            depth_or_array_layers: 1,
         },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         label: Some("depth"),
     });
 
@@ -440,14 +434,13 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         RenderContext {
             window,
             surface,
-            device: device,
-            vertex_shader: vertex_shader,
+            device,
+            vertex_shader,
             fragment_shader,
-            pipeline_layout: pipeline_layout,
+            pipeline_layout,
             bind_group_layout,
             render_pipeline,
-            swap_chain_descriptor,
-            swap_chain,
+            surface_configuration,
             vertex_buffer,
             index_buffer,
             index_count,
@@ -479,7 +472,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 }
 
 fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(), Box<dyn Error>> {
-    let frame = context.swap_chain.get_current_frame()?.output;
+    let frame = context.surface.get_current_frame()?.output;
 
     let duration = SystemTime::now()
         .duration_since(app.start_time)?
@@ -507,34 +500,34 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             (app.camera.far as f32 / WORLD_RADIUS),
         ];
 
-        let window = imgui::Window::new(im_str!("Hello world"));
+        let window = imgui::Window::new("Hello world");
         // let current_shader = context.current_shader.as_ref();
         window
             .position([0.0, 0.0], Condition::FirstUseEver)
             .size([400.0, 400.0], Condition::FirstUseEver)
             .build(&ui, || {
-                ui.text(im_str!("Text"));
-                reload_shaders = ui.button(im_str!("Reload shaders"), [0.0, 0.0]);
-                reload_texture = ui.button(im_str!("Hi-res texture"), [0.0, 0.0]);
-                ui.text(im_str!("Camera"));
-                imgui::Drag::new(im_str!("eye_x"))
-                    .range(-20.0..=20.0)
+                ui.text("Text");
+                reload_shaders = ui.button("Reload shaders");
+                reload_texture = ui.button("Hi-res texture");
+                ui.text("Camera");
+                imgui::Drag::new("eye_x")
+                    .range(-20.0, 20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[0]);
-                imgui::Drag::new(im_str!("eye_y"))
-                    .range(-20.0..=20.0)
+                imgui::Drag::new("eye_y")
+                    .range(-20.0, 20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[1]);
-                imgui::Drag::new(im_str!("eye_z"))
-                    .range(-20.0..=20.0)
+                imgui::Drag::new("eye_z")
+                    .range(-20.0, 20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[2]);
-                imgui::Drag::new(im_str!("near"))
-                    .range(0.0..=20.0)
+                imgui::Drag::new("near")
+                    .range(0.0, 20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[3]);
-                imgui::Drag::new(im_str!("far"))
-                    .range(0.0..=20.0)
+                imgui::Drag::new("far")
+                    .range(0.0, 20.0)
                     .speed(0.05)
                     .build(&ui, &mut t[4]);
 
@@ -542,12 +535,12 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 use std::convert::TryInto;
 
                 reload_vertex_buffer =
-                    imgui::InputInt::new(&ui, im_str!("subdivisions"), &mut s).build();
+                    imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
                 if reload_vertex_buffer && s > 0 {
                     app.subdivisions = s.try_into().unwrap_or(app.subdivisions);
                     println!("subs changed: {}", app.subdivisions);
                 }
-                ui.checkbox(im_str!("demo"), &mut app.demo_window_open);
+                ui.checkbox("demo", &mut app.demo_window_open);
             });
 
         if app.demo_window_open {
@@ -569,7 +562,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: bytemuck::cast_slice(&vertex_data),
-                    usage: wgpu::BufferUsage::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX,
                 });
         context.index_buffer =
             context
@@ -577,7 +570,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: bytemuck::cast_slice(&index_data),
-                    usage: wgpu::BufferUsage::INDEX,
+                    usage: wgpu::BufferUsages::INDEX,
                 });
         context.index_count = index_data.len() as u32;
     }
@@ -606,8 +599,8 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         }
     }
 
-    let view_width = context.swap_chain_descriptor.width;
-    let view_height = context.swap_chain_descriptor.height;
+    let view_width = context.surface_configuration.width;
+    let view_height = context.surface_configuration.height;
 
     // camera position in world coordinates
 
@@ -615,17 +608,17 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let center = glam::DVec3::new(0.0, 0.0, 0.0);
     let up = glam::DVec3::new(0.0, 0.0, 1.0);
 
-    let view = glam::DMat4::look_at_rh(eye.as_f64(), center, up);
+    let view = glam::DMat4::look_at_rh(eye.as_dvec3(), center, up);
     let vertex_uniforms = VertexUniforms {
         model: glam::Mat4::IDENTITY,
-        view: view.as_f32(),
+        view: view.as_mat4(),
         projection: app.camera.perspective_matrix(),
     };
 
     let vertex_uniforms_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::bytes_of(&vertex_uniforms),
-        usage: wgpu::BufferUsage::UNIFORM,
+        usage: wgpu::BufferUsages::UNIFORM,
     });
 
     let resolution = [view_width as f32, view_height as f32, 0.0, 0.0];
@@ -637,7 +630,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let fragment_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::bytes_of(&fragment_uniforms),
-        usage: wgpu::BufferUsage::UNIFORM,
+        usage: wgpu::BufferUsages::UNIFORM,
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -646,19 +639,11 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &vertex_uniforms_buf,
-                    offset: 0,
-                    size: None,
-                },
+                resource: vertex_uniforms_buf.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &fragment_uniform_buf,
-                    offset: 0,
-                    size: None,
-                },
+                resource: fragment_uniform_buf.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 2,
@@ -677,18 +662,19 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             label: Some("WGPU Command Encoder Descriptor"),
         });
     {
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: true,
                 },
             }],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                attachment: &context.depth_texture,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &context.depth_texture,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(f32::MAX),
                     store: false,
@@ -703,10 +689,11 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         render_pass.draw_indexed(0..context.index_count, 0, 0..1);
     }
     {
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
@@ -747,23 +734,21 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 ..
             } => {
                 println!("Resized: {:?}", size);
-                context.swap_chain_descriptor.width = size.width;
-                context.swap_chain_descriptor.height = size.height;
-                context.swap_chain = context
-                    .device
-                    .create_swap_chain(&context.surface, &context.swap_chain_descriptor);
+                context.surface_configuration.width = size.width;
+                context.surface_configuration.height = size.height;
+                context.surface.configure(&context.device, &context.surface_configuration);
 
                 let depth_texture = context.device.create_texture(&wgpu::TextureDescriptor {
                     size: wgpu::Extent3d {
                         width: size.width,
                         height: size.height,
-                        depth: 1,
+                        depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: DEPTH_FORMAT,
-                    usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                     label: None,
                 });
                 context.depth_texture =

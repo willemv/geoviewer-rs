@@ -1,7 +1,7 @@
 use image;
 use std;
 use std::error::Error;
-use std::io::BufRead;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use wgpu::TextureView;
 
@@ -21,14 +21,8 @@ fn load_texture(
     queue: Arc<wgpu::Queue>,
     filename: &str,
 ) -> TextureResult {
-    println!("Opening file");
-    let diffuse_file = std::fs::File::open(filename)?;
     println!("Reading file");
-    let mut diffuse_file = std::io::BufReader::new(diffuse_file);
-    //call fill_buff without the corresponding consume, to peek the initial bytes of the file and guess the format
-    let header = diffuse_file.fill_buf()?;
-    let format = image::guess_format(header)?;
-    let diffuse_image = image::load(diffuse_file, format)?;
+    let diffuse_image = image::io::Reader::open(filename)?.decode()?;
 
     println!("Into rgba");
     let diffuse_rgba = diffuse_image.into_rgba8();
@@ -39,7 +33,7 @@ fn load_texture(
         width: dimensions.0,
         height: dimensions.1,
         // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
-        depth: 1,
+        depth_or_array_layers: 1,
     };
     println!("Creating texture");
     let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -50,25 +44,27 @@ fn load_texture(
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
         // SAMPLED tells wgpu that we want to use this texture in shaders
         // COPY_DST means that we want to copy data to this texture
-        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         label: Some("diffuse_texture"),
     });
 
     println!("Queuing texture write");
     queue.write_texture(
         // Tells wgpu where to copy the pixel data
-        wgpu::TextureCopyView {
+        wgpu::ImageCopyTexture {
             texture: &diffuse_texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All
         },
         // The actual pixel data
         &diffuse_rgba,
         // The layout of the texture
-        wgpu::TextureDataLayout {
+        wgpu::ImageDataLayout {
             offset: 0,
-            bytes_per_row: 4 * dimensions.0,
-            rows_per_image: dimensions.1,
+            bytes_per_row: Some(NonZeroU32::new(4 * dimensions.0).unwrap()),
+            ..Default::default()
+            // rows_per_image: dimensions.1,
         },
         texture_size,
     );
@@ -88,7 +84,7 @@ impl AsyncTexture {
             width: dimensions.0,
             height: dimensions.1,
             // All textures are stored as 3D, we represent our 2D texture by setting depth to 1.
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
             size: texture_size,
@@ -98,24 +94,26 @@ impl AsyncTexture {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             // SAMPLED tells wgpu that we want to use this texture in shaders
             // COPY_DST means that we want to copy data to this texture
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("diffuse_texture"),
         });
 
         queue.write_texture(
             // Tells wgpu where to copy the pixel data
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: &diffuse_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             // The actual pixel data
             &color_data,
             // The layout of the texture
-            wgpu::TextureDataLayout {
+            wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: 4 * dimensions.0,
-                rows_per_image: dimensions.1,
+                ..Default::default()
+                // bytes_per_row: 4 * dimensions.0,
+                // rows_per_image: dimensions.1,
             },
             texture_size,
         );
