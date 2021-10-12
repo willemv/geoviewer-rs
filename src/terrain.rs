@@ -52,7 +52,7 @@ fn load_texture(
             texture: &diffuse_texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All
+            aspect: wgpu::TextureAspect::All,
         },
         // The actual pixel data
         &diffuse_rgba,
@@ -60,8 +60,7 @@ fn load_texture(
         wgpu::ImageDataLayout {
             offset: 0,
             bytes_per_row: Some(NonZeroU32::new(4 * dimensions.0).unwrap()),
-            ..Default::default()
-            // rows_per_image: dimensions.1,
+            ..Default::default() // rows_per_image: dimensions.1,
         },
         texture_size,
     );

@@ -81,7 +81,10 @@ impl Controller {
         let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
         camera.eye = new_eye;
 
-        camera.near = f64::from(new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3).max(0.0);
-        camera.far = f64::from(new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3);
+        camera.near =
+            f64::from(new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3)
+                .max(0.0);
+        camera.far =
+            f64::from(new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3);
     }
 }

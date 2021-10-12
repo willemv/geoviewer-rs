@@ -33,13 +33,13 @@ mod simple_error;
 use simple_error::SimpleError;
 use wgpu::include_wgsl;
 
+use std::convert::TryInto;
 use std::error::Error;
 use std::f64::consts::PI;
 use std::mem;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::convert::TryInto;
 
 use bytemuck::{Pod, Zeroable};
 use imgui::Condition;
@@ -189,7 +189,7 @@ fn prepare_new_shader(
 
     let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: Some("geoviewer.wgsl"),
-        source: wgpu::ShaderSource::Wgsl(source.into())
+        source: wgpu::ShaderSource::Wgsl(source.into()),
     });
 
     let new = create_render_pipeline(
@@ -314,12 +314,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         push_constant_ranges: &[],
     });
 
-    let render_pipeline = create_render_pipeline(
-        &device,
-        &shader,
-        &pipeline_layout,
-        swap_chain_format,
-    );
+    let render_pipeline =
+        create_render_pipeline(&device, &shader, &pipeline_layout, swap_chain_format);
 
     let surface_configuration = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -492,8 +488,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
 
                 let mut s = app.subdivisions as i32;
 
-                reload_vertex_buffer =
-                    imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
+                reload_vertex_buffer = imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
                 if reload_vertex_buffer && s > 0 {
                     app.subdivisions = s.try_into().unwrap_or(app.subdivisions);
                     println!("subs changed: {}", app.subdivisions);
@@ -617,7 +612,9 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             label: Some("WGPU Command Encoder Descriptor"),
         });
     {
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -644,7 +641,9 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         render_pass.draw_indexed(0..context.index_count, 0, 0..1);
     }
     {
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -693,7 +692,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 }
                 context.surface_configuration.width = size.width;
                 context.surface_configuration.height = size.height;
-                context.surface.configure(&context.device, &context.surface_configuration);
+                context
+                    .surface
+                    .configure(&context.device, &context.surface_configuration);
 
                 let depth_texture = context.device.create_texture(&wgpu::TextureDescriptor {
                     size: wgpu::Extent3d {
@@ -736,11 +737,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         ..
                     },
                 ..
-            } if !gui.imgui.io().want_capture_mouse => {
-                match *state {
-                    winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
-                    winit::event::ElementState::Released => app.controller.mouse_released(),
-                }
+            } if !gui.imgui.io().want_capture_mouse => match *state {
+                winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
+                winit::event::ElementState::Released => app.controller.mouse_released(),
             },
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
@@ -748,10 +747,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
             } if !gui.imgui.io().want_capture_mouse => {
                 app.controller
                     .mouse_moved(position.x, position.y, &mut app.camera);
-
             }
             Event::WindowEvent {
-                event: WindowEvent::MouseWheel { delta: winit::event::MouseScrollDelta::LineDelta(_, y), .. },
+                event:
+                    WindowEvent::MouseWheel {
+                        delta: winit::event::MouseScrollDelta::LineDelta(_, y),
+                        ..
+                    },
                 ..
             } if !gui.imgui.io().want_capture_mouse => {
                 //pos: push away

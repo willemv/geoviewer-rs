@@ -1,5 +1,5 @@
 #![allow(clippy::many_single_char_names)]
-use glam::{Quat, Vec2, Vec3, f32};
+use glam::{f32, Quat, Vec2, Vec3};
 
 // from https://github.com/kaiware007/IcoSphereCreator
 // that one is written with Unity's coordinate system in mind:
@@ -141,8 +141,8 @@ fn create_uv(n: usize, vertices: &[Vec3]) -> Vec<Vec2> {
     }
 
     let tt = tri * 3;
-    uv[     0].x = 0.125;
-    uv[    tt].x = 0.125;
+    uv[0].x = 0.125;
+    uv[tt].x = 0.125;
     uv[2 * tt].x = 0.375;
     uv[3 * tt].x = 0.375;
     uv[4 * tt].x = 0.625;
