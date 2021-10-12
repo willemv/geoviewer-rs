@@ -712,7 +712,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 event: WindowEvent::Resized(size),
                 ..
             } => {
-                println!("Resized: {:?}", size);
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
                 context.surface_configuration.width = size.width;
                 context.surface_configuration.height = size.height;
                 context.surface.configure(&context.device, &context.surface_configuration);
@@ -758,21 +760,24 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         ..
                     },
                 ..
-            } => match *state {
-                winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
-                winit::event::ElementState::Released => app.controller.mouse_released(),
+            } if !gui.imgui.io().want_capture_mouse => {
+                match *state {
+                    winit::event::ElementState::Pressed => app.controller.mouse_pressed(),
+                    winit::event::ElementState::Released => app.controller.mouse_released(),
+                }
             },
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
                 ..
-            } => {
+            } if !gui.imgui.io().want_capture_mouse => {
                 app.controller
                     .mouse_moved(position.x, position.y, &mut app.camera);
+
             }
             Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },
                 ..
-            } => {
+            } if !gui.imgui.io().want_capture_mouse => {
                 //pos: push away
                 match delta {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => {
