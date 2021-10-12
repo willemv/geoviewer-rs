@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
-use crate::camera::*;
-use crate::controller::*;
+use crate::camera::Camera;
+use crate::controller::Controller;
 
 #[allow(dead_code)]
 pub struct App {

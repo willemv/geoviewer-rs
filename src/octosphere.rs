@@ -108,7 +108,7 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     }
 
     let uv = create_uv(n, &vertices);
-    for v in vertices.iter_mut() {
+    for v in &mut vertices {
         *v *= radius;
     }
     // mesh.RecalculateNormals();

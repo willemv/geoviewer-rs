@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use wgpu::TextureView;
 
-use futures::channel::oneshot::*;
+use futures::channel::oneshot::{Canceled, Receiver, channel};
 use futures::executor::ThreadPool;
 
 type TextureResult = Result<wgpu::Texture, Box<dyn Error + Send + Sync>>;
@@ -14,8 +14,8 @@ pub struct AsyncTexture {
 }
 
 fn load_texture(
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
+    device: &Arc<wgpu::Device>,
+    queue: &Arc<wgpu::Queue>,
     filename: &str,
 ) -> TextureResult {
     println!("Reading file");
@@ -128,9 +128,8 @@ impl AsyncTexture {
         &mut self,
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) {
         self.start_loading(device, queue, "assets/eo_base_2020_clean_3600x1800.png");
-        Ok(())
     }
 
     fn start_loading(
@@ -141,8 +140,8 @@ impl AsyncTexture {
     ) {
         let (sender, receiver) = channel();
         let f = async move {
-            let t = load_texture(device, queue, filename);
-            if let Err(_) = sender.send(t) {
+            let t = load_texture(&device, &queue, filename);
+            if sender.send(t).is_err() {
                 println!("Unable to send texture result to paint queue");
             }
         };
@@ -164,7 +163,7 @@ impl AsyncTexture {
                     std::mem::take(&mut self.future_texture);
                     if let Ok(texture) = result {
                         self.texture_view =
-                            texture.create_view(&wgpu::TextureViewDescriptor::default())
+                            texture.create_view(&wgpu::TextureViewDescriptor::default());
                     }
                 }
             }

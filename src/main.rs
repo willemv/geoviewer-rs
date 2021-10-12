@@ -1,6 +1,10 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::single_match_else)]
 
 extern crate bytemuck;
 extern crate crossbeam;
@@ -508,7 +512,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertex_data, index_data) = create_octo_sphere(app.subdivisions, WORLD_RADIUS as f64);
+        let (vertex_data, index_data) = create_octo_sphere(app.subdivisions, f64::from(WORLD_RADIUS));
         context.vertex_buffer =
             context
                 .device
@@ -529,12 +533,9 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_texture {
-        if let Err(e) = context
+        context
             .async_texture
-            .load_hi_res_texture(context.device.clone(), context.queue.clone())
-        {
-            println!("error loading texture: {}", e);
-        }
+            .load_hi_res_texture(context.device.clone(), context.queue.clone());
     }
 
     if reload_shaders {
