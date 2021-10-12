@@ -1,4 +1,6 @@
 #![deny(clippy::pedantic)]
+#![allow(clippy::default_trait_access)]
+#![allow(clippy::cast_possible_truncation)]
 
 extern crate bytemuck;
 extern crate crossbeam;
@@ -14,21 +16,21 @@ extern crate winit;
 mod terrain;
 
 mod app;
-use app::*;
+use app::App;
 
 mod camera;
-use camera::*;
+use camera::Camera;
 
 mod controller;
-use controller::*;
+use controller::Controller;
 
 mod model;
-use model::*;
+use model::WORLD_RADIUS;
 
 mod octosphere;
 
 mod simple_error;
-use simple_error::*;
+use simple_error::SimpleError;
 use wgpu::include_wgsl;
 
 use std::error::Error;
@@ -37,10 +39,11 @@ use std::mem;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::convert::TryInto;
 
 use bytemuck::{Pod, Zeroable};
-use imgui::*;
-use imgui_winit_support::*;
+use imgui::Condition;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use wgpu::util::DeviceExt;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -238,7 +241,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let subdivisions = 16;
     //setup data
-    let (vertices, indices) = create_octo_sphere(subdivisions, WORLD_RADIUS as f64);
+    let (vertices, indices) = create_octo_sphere(subdivisions, f64::from(WORLD_RADIUS));
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -326,7 +329,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
         present_mode: wgpu::PresentMode::Mailbox,
     };
 
-    let aspect = window_size.width as f64 / window_size.height as f64;
+    let aspect = f64::from(window_size.width) / f64::from(window_size.height);
     surface.configure(&device, &surface_configuration);
 
     //set up imgui
@@ -411,8 +414,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             camera: Camera {
                 eye: glam::Vec3::new(6.0 * WORLD_RADIUS, 0.0 * WORLD_RADIUS, 1.2 * WORLD_RADIUS),
                 fov_y_radians: PI / 4.0,
-                near: 0.25 * WORLD_RADIUS as f64,
-                far: 15.0 * WORLD_RADIUS as f64,
+                near: 0.25 * f64::from(WORLD_RADIUS),
+                far: 15.0 * f64::from(WORLD_RADIUS),
                 aspect,
             },
             controller: Controller::new(),
@@ -488,7 +491,6 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     .build(&ui, &mut t[4]);
 
                 let mut s = app.subdivisions as i32;
-                use std::convert::TryInto;
 
                 reload_vertex_buffer =
                     imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
@@ -506,8 +508,8 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         app.camera.eye.x = t[0] * WORLD_RADIUS;
         app.camera.eye.y = t[1] * WORLD_RADIUS;
         app.camera.eye.z = t[2] * WORLD_RADIUS;
-        app.camera.near = t[3] as f64 * WORLD_RADIUS as f64;
-        app.camera.far = t[4] as f64 * WORLD_RADIUS as f64;
+        app.camera.near = f64::from(t[3]) * f64::from(WORLD_RADIUS);
+        app.camera.far = f64::from(t[4]) * f64::from(WORLD_RADIUS);
     }
 
     if reload_vertex_buffer {
@@ -532,13 +534,11 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_texture {
-        match context
+        if let Err(e) = context
             .async_texture
             .load_hi_res_texture(context.device.clone(), context.queue.clone())
         {
-            // Ok(texture_view) => context.diffuse_texture_view = texture_view,
-            Err(e) => println!("error loading texture: {}", e),
-            _ => {}
+            println!("error loading texture: {}", e);
         }
     }
 
@@ -710,7 +710,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 });
                 context.depth_texture =
                     depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                app.camera.aspect = size.width as f64 / size.height as f64;
+                app.camera.aspect = f64::from(size.width) / f64::from(size.height);
             }
             Event::MainEventsCleared => {
                 match render(&mut context, &mut app, &mut gui) {
@@ -751,16 +751,11 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
             }
             Event::WindowEvent {
-                event: WindowEvent::MouseWheel { delta, .. },
+                event: WindowEvent::MouseWheel { delta: winit::event::MouseScrollDelta::LineDelta(_, y), .. },
                 ..
             } if !gui.imgui.io().want_capture_mouse => {
                 //pos: push away
-                match delta {
-                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
-                        app.controller.scroll(y, &mut app.camera);
-                    }
-                    _ => {}
-                }
+                app.controller.scroll(y, &mut app.camera);
             }
             _ => {}
         }

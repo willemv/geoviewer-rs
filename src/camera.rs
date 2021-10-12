@@ -1,5 +1,3 @@
-use glam;
-
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
     pub eye: glam::Vec3,

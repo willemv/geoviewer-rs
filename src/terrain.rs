@@ -1,11 +1,8 @@
-use image;
-use std;
 use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use wgpu::TextureView;
 
-use futures;
 use futures::channel::oneshot::*;
 use futures::executor::ThreadPool;
 
@@ -76,7 +73,7 @@ fn load_texture(
 impl AsyncTexture {
     pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> AsyncTexture {
         //rgb(165, 205, 213)
-        let color: u32 = 0xa5cdd5ff;
+        let color: u32 = 0xa5cd_d5ff;
         let color_data = color.to_be_bytes();
         let dimensions = (1, 1);
 

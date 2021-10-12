@@ -1,4 +1,5 @@
-use glam::*;
+#![allow(clippy::many_single_char_names)]
+use glam::{Quat, Vec2, Vec3, f32};
 
 // from https://github.com/kaiware007/IcoSphereCreator
 // that one is written with Unity's coordinate system in mind:
@@ -81,34 +82,34 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
 
                 triangles.push(j);
                 vertices.push(Vec3::new(a.x, a.y, a.z));
-                j = j + 1;
+                j += 1;
                 triangles.push(j);
                 vertices.push(Vec3::new(b.x, b.y, b.z));
-                j = j + 1;
+                j += 1;
                 triangles.push(j);
                 vertices.push(Vec3::new(c.x, c.y, c.z));
-                j = j + 1;
+                j += 1;
 
                 if q < n - p - 1 {
                     triangles.push(j);
                     vertices.push(Vec3::new(c.x, c.y, c.z));
-                    j = j + 1;
+                    j += 1;
 
                     triangles.push(j);
                     vertices.push(Vec3::new(b.x, b.y, b.z));
-                    j = j + 1;
+                    j += 1;
 
                     triangles.push(j);
                     vertices.push(Vec3::new(d.x, d.y, d.z));
-                    j = j + 1;
+                    j += 1;
                 }
             }
         }
     }
 
     let uv = create_uv(n, &vertices);
-    for i in 0..vertex_num {
-        vertices[i] *= radius;
+    for v in vertices.iter_mut() {
+        *v *= radius;
     }
     // mesh.RecalculateNormals();
     // CreateTangents(mesh);
@@ -116,16 +117,14 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     (vertices, triangles, uv)
 }
 
-fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
+fn create_uv(n: usize, vertices: &[Vec3]) -> Vec<Vec2> {
     let vertex_num = n * n * 24;
     let mut uv = Vec::with_capacity(vertex_num);
 
     let tri = n * n; // divided triangle count (1,4,9...)
     let uv_limit = tri * 18; // range of wrap UV.x
 
-    for i in 0..vertices.len() {
-        let v = vertices[i];
-
+    for (i, v) in vertices.iter().enumerate() {
         let mut texture_coordinates = Vec2::splat(0.0);
         if (v.y == 0.0) && (i > uv_limit) {
             texture_coordinates.x = 1.0;
@@ -142,14 +141,14 @@ fn create_uv(n: usize, vertices: &Vec<Vec3>) -> Vec<Vec2> {
     }
 
     let tt = tri * 3;
-    uv[0 * tt + 0].x = 0.125;
-    uv[1 * tt + 0].x = 0.125;
-    uv[2 * tt + 0].x = 0.375;
-    uv[3 * tt + 0].x = 0.375;
-    uv[4 * tt + 0].x = 0.625;
-    uv[5 * tt + 0].x = 0.628;
-    uv[6 * tt + 0].x = 0.875;
-    uv[7 * tt + 0].x = 0.875;
+    uv[     0].x = 0.125;
+    uv[    tt].x = 0.125;
+    uv[2 * tt].x = 0.375;
+    uv[3 * tt].x = 0.375;
+    uv[4 * tt].x = 0.625;
+    uv[5 * tt].x = 0.628;
+    uv[6 * tt].x = 0.875;
+    uv[7 * tt].x = 0.875;
 
     uv
 }

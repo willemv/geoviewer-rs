@@ -1,7 +1,9 @@
 use glam::Vec3;
 
-use crate::camera::*;
-use crate::model::*;
+use crate::camera::Camera;
+use crate::model::WORLD_RADIUS;
+
+use std::f32::consts::PI;
 
 pub struct Controller {
     mouse_down: bool,
@@ -35,7 +37,7 @@ impl Controller {
             return;
         }
 
-        let (mdp, mde) = match self.mouse_down_coordinates {
+        let (md_point, md_eye) = match self.mouse_down_coordinates {
             Some(c) => c,
             None => {
                 self.mouse_down_coordinates = Some(([x, y], camera.eye));
@@ -43,14 +45,13 @@ impl Controller {
             }
         };
 
-        let dx = (x - mdp[0]) as f32;
-        let dy = (y - mdp[1]) as f32;
+        let dx = (x - md_point[0]) as f32;
+        let dy = (y - md_point[1]) as f32;
 
-        let original_r = mde.length();
-        let original_rho = mde.y.atan2(mde.x);
-        let original_theta = (mde.z / original_r).asin();
+        let original_r = md_eye.length();
+        let original_rho = md_eye.y.atan2(md_eye.x);
+        let original_theta = (md_eye.z / original_r).asin();
 
-        use std::f32::consts::PI;
         let new_rho = original_rho + (-dx / 300.0 * 2.0 * PI);
         let new_theta = (original_theta + (dy / 300.0 * PI)).clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
 
@@ -80,9 +81,7 @@ impl Controller {
         let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
         camera.eye = new_eye;
 
-        camera.near = ((new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3)
-            as f64)
-            .max(0.0);
-        camera.far = (new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3) as f64;
+        camera.near = f64::from(new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3).max(0.0);
+        camera.far = f64::from(new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3);
     }
 }
