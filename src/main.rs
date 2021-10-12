@@ -512,7 +512,8 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertex_data, index_data) = create_octo_sphere(app.subdivisions, f64::from(WORLD_RADIUS));
+        let (vertex_data, index_data) =
+            create_octo_sphere(app.subdivisions, f64::from(WORLD_RADIUS));
         context.vertex_buffer =
             context
                 .device

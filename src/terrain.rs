@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use wgpu::TextureView;
 
-use futures::channel::oneshot::{Canceled, Receiver, channel};
+use futures::channel::oneshot::{channel, Canceled, Receiver};
 use futures::executor::ThreadPool;
 
 type TextureResult = Result<wgpu::Texture, Box<dyn Error + Send + Sync>>;
@@ -124,11 +124,7 @@ impl AsyncTexture {
         result
     }
 
-    pub fn load_hi_res_texture(
-        &mut self,
-        device: Arc<wgpu::Device>,
-        queue: Arc<wgpu::Queue>,
-    ) {
+    pub fn load_hi_res_texture(&mut self, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
         self.start_loading(device, queue, "assets/eo_base_2020_clean_3600x1800.png");
     }
 
