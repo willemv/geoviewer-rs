@@ -34,6 +34,7 @@ use wgpu::include_wgsl;
 use std::error::Error;
 use std::f64::consts::PI;
 use std::mem;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -177,7 +178,8 @@ fn prepare_new_shader(
     device: &wgpu::Device,
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> Result<(wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
-    let source = std::fs::read_to_string("src/geoviewer.wgsl")?;
+    let path = Path::new(file!()).with_file_name("geoviewer.wgsl");
+    let source = std::fs::read_to_string(path)?;
     // create_shader_module panics if there are wgsl compilation errors
     // that really kills the interactivity, so parse with error checking first
     naga::front::wgsl::parse_str(&source)?;
@@ -250,32 +252,6 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
     });
     let index_count = indices.len() as u32;
 
-    // let vertex_shader_text = std::fs::read_to_string("src/shader.vert")?;
-
-    // let mut compiler = shaderc::Compiler::new()
-    //     .ok_or_else(|| SimpleError::new("Could not create shader compiler"))?;
-    // let options = shaderc::CompileOptions::new()
-    //     .ok_or_else(|| SimpleError::new("Could not create compile options"))?;
-    // let binary = compiler.compile_into_spirv(
-    //     &vertex_shader_text,
-    //     shaderc::ShaderKind::Vertex,
-    //     "shader_vert",
-    //     "main",
-    //     Some(&options),
-    // )?;
-    // let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-    //     label: None,
-    //     source: wgpu::util::make_spirv(binary.as_binary_u8()),
-    // });
-
-    // let fragment_shader_text = std::fs::read_to_string("src/shader.frag")?;
-    // let binary = compiler.compile_into_spirv(
-    //     &fragment_shader_text,
-    //     shaderc::ShaderKind::Fragment,
-    //     "shader.frag",
-    //     "main",
-    //     Some(&options),
-    // )?;
     let shader = device.create_shader_module(&include_wgsl!("geoviewer.wgsl"));
 
     let swap_chain_format = wgpu::TextureFormat::Bgra8Unorm;
