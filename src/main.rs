@@ -41,6 +41,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::f64::consts::PI;
 use std::mem;
+use std::panic::AssertUnwindSafe;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -187,14 +188,14 @@ fn prepare_new_shader(
 ) -> Result<(wgpu::ShaderModule, wgpu::RenderPipeline), Box<dyn Error>> {
     let path = Path::new(file!()).with_file_name("geoviewer.wgsl");
     let source = std::fs::read_to_string(path)?;
-    // create_shader_module panics if there are wgsl compilation errors
-    // that really kills the interactivity, so parse with error checking first
-    naga::front::wgsl::parse_str(&source)?;
 
-    let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: Some("geoviewer.wgsl"),
-        source: wgpu::ShaderSource::Wgsl(source.into()),
-    });
+    let shader_module = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("geoviewer.wgsl"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        })
+    }))
+    .map_err(|err| SimpleError::from_string(format!("{:?}", err)))?;
 
     let new = create_render_pipeline(
         device,
