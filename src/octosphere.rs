@@ -1,5 +1,5 @@
 #![allow(clippy::many_single_char_names)]
-use glam::{f32, Quat, Vec2, Vec3};
+use glam::{f32, Quat, Vec2, Vec4};
 
 // from https://github.com/kaiware007/IcoSphereCreator
 // that one is written with Unity's coordinate system in mind:
@@ -7,10 +7,10 @@ use glam::{f32, Quat, Vec2, Vec3};
 // our world coordinate system however, is right handed
 // and Z points up
 
-pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
+pub fn create(n: u8, radius: f32) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
     let n = n as usize;
     let vertex_num = n * n * 24;
-    let mut vertices: Vec<Vec3> = Vec::with_capacity(vertex_num as usize);
+    let mut vertices: Vec<Vec4> = Vec::with_capacity(vertex_num as usize);
     let mut triangles = Vec::with_capacity(vertex_num as usize);
 
     let init_vectors = [
@@ -81,26 +81,27 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
                 };
 
                 triangles.push(j);
-                vertices.push(Vec3::new(a.x, a.y, a.z));
+                vertices.push(Vec4::new(a.x, a.y, a.z, 1.0));
+                // normals.push(Vec3::new())
                 j += 1;
                 triangles.push(j);
-                vertices.push(Vec3::new(b.x, b.y, b.z));
+                vertices.push(Vec4::new(b.x, b.y, b.z, 1.0));
                 j += 1;
                 triangles.push(j);
-                vertices.push(Vec3::new(c.x, c.y, c.z));
+                vertices.push(Vec4::new(c.x, c.y, c.z, 1.0));
                 j += 1;
 
                 if q < n - p - 1 {
                     triangles.push(j);
-                    vertices.push(Vec3::new(c.x, c.y, c.z));
+                    vertices.push(Vec4::new(c.x, c.y, c.z, 1.0));
                     j += 1;
 
                     triangles.push(j);
-                    vertices.push(Vec3::new(b.x, b.y, b.z));
+                    vertices.push(Vec4::new(b.x, b.y, b.z, 1.0));
                     j += 1;
 
                     triangles.push(j);
-                    vertices.push(Vec3::new(d.x, d.y, d.z));
+                    vertices.push(Vec4::new(d.x, d.y, d.z, 1.0));
                     j += 1;
                 }
             }
@@ -110,14 +111,15 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     let uv = create_uv(n, &vertices);
     for v in &mut vertices {
         *v *= radius;
+        v.w = 1.0;
     }
     // mesh.RecalculateNormals();
     // CreateTangents(mesh);
 
-    (vertices, triangles, uv)
+    (vertices, uv, triangles)
 }
 
-fn create_uv(n: usize, vertices: &[Vec3]) -> Vec<Vec2> {
+fn create_uv(n: usize, vertices: &[Vec4]) -> Vec<Vec2> {
     let vertex_num = n * n * 24;
     let mut uv = Vec::with_capacity(vertex_num);
 

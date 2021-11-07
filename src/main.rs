@@ -85,39 +85,6 @@ struct FragmentUniforms {
 unsafe impl Pod for FragmentUniforms {}
 unsafe impl Zeroable for FragmentUniforms {}
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Vertex {
-    _pos: [f32; 4],
-    _tex: [f32; 2],
-}
-
-unsafe impl Pod for Vertex {}
-unsafe impl Zeroable for Vertex {}
-
-fn vertex(pos: [f32; 4], tex: [f32; 2]) -> Vertex {
-    Vertex {
-        _pos: pos,
-        _tex: tex,
-    }
-}
-
-fn create_octo_sphere(subdivisions: usize, half: f64) -> (Vec<Vertex>, Vec<u16>) {
-    let half = half as f32;
-
-    let (vertices, indices, uvs) = octosphere::create(subdivisions as u8, half);
-
-    let vertex_data: Vec<Vertex> = vertices
-        .into_iter()
-        .zip(uvs.into_iter())
-        .map(|(v, t)| vertex([v.x, v.y, v.z, 1.0], [t.x, t.y]))
-        .collect();
-
-    let index_data: Vec<u16> = indices.into_iter().map(|i| i as u16).collect();
-
-    (vertex_data, index_data)
-}
-
 struct RenderContext {
     window: Window,
     surface: wgpu::Surface,
@@ -128,6 +95,7 @@ struct RenderContext {
     render_pipeline: wgpu::RenderPipeline,
     surface_configuration: wgpu::SurfaceConfiguration,
     vertex_buffer: wgpu::Buffer,
+    uvs_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
     async_texture: terrain::AsyncTexture,
@@ -154,11 +122,18 @@ fn create_render_pipeline(
         vertex: wgpu::VertexState {
             module: shader_module,
             entry_point: "vs_main",
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x2],
-            }],
+            buffers: &[
+                wgpu::VertexBufferLayout {
+                    array_stride: mem::size_of::<glam::Vec4>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x4],
+                },
+                wgpu::VertexBufferLayout {
+                    array_stride: mem::size_of::<glam::Vec2>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![1 => Float32x2],
+                },
+            ],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader_module,
@@ -246,10 +221,15 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let subdivisions = 16;
     //setup data
-    let (vertices, indices) = create_octo_sphere(subdivisions, f64::from(WORLD_RADIUS));
+    let (vertices, uvs, indices) = octosphere::create(subdivisions, WORLD_RADIUS);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    let uvs_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("uvs_buffer"),
+        contents: bytemuck::cast_slice(&uvs),
         usage: wgpu::BufferUsages::VERTEX,
     });
 
@@ -402,6 +382,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             render_pipeline,
             surface_configuration,
             vertex_buffer,
+            uvs_buffer,
             index_buffer,
             index_count,
             async_texture,
@@ -491,7 +472,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     .speed(0.05)
                     .build(&ui, &mut t[4]);
 
-                let mut s = app.subdivisions as i32;
+                let mut s = i32::from(app.subdivisions);
 
                 reload_vertex_buffer = imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
                 if reload_vertex_buffer && s > 0 {
@@ -513,16 +494,23 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertex_data, index_data) =
-            create_octo_sphere(app.subdivisions, f64::from(WORLD_RADIUS));
+        let (vertex_data, uv_data, index_data) =
+            octosphere::create(app.subdivisions, WORLD_RADIUS);
         context.vertex_buffer =
             context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
+                    label: Some("vertex_position_buffer"),
                     contents: bytemuck::cast_slice(&vertex_data),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
+        context.uvs_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("uv_buffer"),
+                contents: bytemuck::cast_slice(&uv_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
         context.index_buffer =
             context
                 .device
@@ -641,6 +629,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_index_buffer(context.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.set_vertex_buffer(0, context.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, context.uvs_buffer.slice(..));
         render_pass.draw_indexed(0..context.index_count, 0, 0..1);
     }
     {

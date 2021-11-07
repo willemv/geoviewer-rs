@@ -10,5 +10,5 @@ pub struct App {
     pub camera: Camera,
     pub controller: Controller,
     pub demo_window_open: bool,
-    pub subdivisions: usize,
+    pub subdivisions: u8,
 }

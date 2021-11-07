@@ -9,13 +9,13 @@ resolver="2"
 
 [dependencies]
 winit = "0.25"
-wgpu = { version="*", features = ["spirv"] }
+wgpu = "*"
 imgui = "*"
 imgui-wgpu = "*"
 naga = "*"
 bytemuck = "*"
 crossbeam = "*"
-glam = "*"
+glam = { version = "*", features = ["bytemuck"] }
 image = "*"
 
 [dependencies.futures]
