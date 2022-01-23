@@ -26,3 +26,19 @@ features = ["executor", "thread-pool"]
 version = "0.8.0"
 features = ["winit-25"]
 default-features = false
+
+[profile.dev.package.png]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
+codegen-units = 16
+
+[profile.dev.package.image]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
+codegen-units = 16
