@@ -495,21 +495,24 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertex_data, uv_data, index_data) =
-            octosphere::create(app.subdivisions, WORLD_RADIUS);
+        let (vertices, uvs, indices) = octosphere::create(app.subdivisions, WORLD_RADIUS);
+        let vertex_data = bytemuck::cast_slice(&vertices);
+        let uv_data = bytemuck::cast_slice(&uvs);
+        let index_data = bytemuck::cast_slice(&indices);
+
         context.vertex_buffer =
             context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("vertex_position_buffer"),
-                    contents: bytemuck::cast_slice(&vertex_data),
+                    contents: vertex_data,
                     usage: wgpu::BufferUsages::VERTEX,
                 });
         context.uvs_buffer = context
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("uv_buffer"),
-                contents: bytemuck::cast_slice(&uv_data),
+                contents: uv_data,
                 usage: wgpu::BufferUsages::VERTEX,
             });
         context.index_buffer =
@@ -517,10 +520,14 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
-                    contents: bytemuck::cast_slice(&index_data),
+                    contents: index_data,
                     usage: wgpu::BufferUsages::INDEX,
                 });
-        context.index_count = index_data.len() as u32;
+        context.index_count = indices.len() as u32;
+
+        let geometry_data_size = vertex_data.len() + uv_data.len() + index_data.len();
+        println!("Total geometry size: {geometry_data_size}");
+        println!("Vertex count: {}", vertices.len());
     }
 
     if reload_texture {
