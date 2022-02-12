@@ -141,6 +141,7 @@ fn create_render_pipeline(
             targets: &[swap_chain_format.into()],
         }),
         primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleStrip,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
             // strip_index_format: None,

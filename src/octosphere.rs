@@ -1,138 +1,203 @@
 #![allow(clippy::many_single_char_names)]
+use std::collections::HashMap;
+
 use glam::{f32, Quat, Vec2, Vec4};
 
-// from https://github.com/kaiware007/IcoSphereCreator
-// that one is written with Unity's coordinate system in mind:
-// a left-handed coordinate system, with Y pointed up
-// our world coordinate system however, is right handed
-// and Z points up
-
 pub fn create(n: u8, radius: f32) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
-    let n = n as usize;
-    let vertex_num = n * n * 24;
+    let n = n as u16;
+
+    let num_vertices_per_side = (2 + n * n) as u16;
+    let vertex_num = num_vertices_per_side * 4;
     let mut vertices: Vec<Vec4> = Vec::with_capacity(vertex_num as usize);
-    let mut triangles = Vec::with_capacity(vertex_num as usize);
+    let mut indices = Vec::with_capacity(vertex_num as usize); //TODO: this initial capacity is not the actual size at the end, we can calculate that though
+
+    let north_pole = Quat::from_xyzw(0.0, 0.0, 1.0, 0.0);
+    let south_pole = Quat::from_xyzw(0.0, 0.0, -1.0, 0.0);
+
+    let back = Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0);
+    let west = Quat::from_xyzw(0.0, -1.0, 0.0, 0.0);
+    let front = Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
+    let east = Quat::from_xyzw(0.0, 1.0, 0.0, 0.0);
 
     let init_vectors = [
-        // 0
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
-        // 1
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        // 2
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        // 3
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, -1.0, 0.0, 0.0),
-        // 4
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
-        // 5
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
-        Quat::from_xyzw(1.0, 0.0, 0.0, 0.0),
-        // 6
-        Quat::from_xyzw(0.0, 0.0, 1.0, 0.0),
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        // 7
-        Quat::from_xyzw(0.0, 0.0, -1.0, 0.0),
-        Quat::from_xyzw(-1.0, 0.0, 0.0, 0.0),
-        Quat::from_xyzw(0.0, 1.0, 0.0, 0.0),
+        back, west, // 0
+        west, front, // 1
+        front, east, // 2
+        east, back, //3
     ];
 
-    let mut j = 0; //index on vectors[]
+    for i in 0..4 {
+        let top = north_pole;
+        let left = init_vectors[2 * i];
+        let right = init_vectors[2 * i + 1];
+        let bottom = south_pole;
 
-    for i in (0..24).step_by(3) {
-        /*
-         *                   c _________d
-         *    ^ /\           /\        /
-         *   / /  \         /  \      /
-         *  p /    \       /    \    /
-         *   /      \     /      \  /
-         *  /________\   /________\/
-         *     q->       a         b
-         */
+        let i = i as u16;
+
+        //region Vertices
+
+        //add the north pole
+        vertices.push(Vec4::new(top.x, top.y, top.z, 1.0));
+
+        let index_start = i * num_vertices_per_side;
+
+        // ] north pole, equator ]
         for p in 0..n {
-            //edge index 1
-            let edge_p1 = init_vectors[i].lerp(init_vectors[i + 2], p as f32 / n as f32);
-            let edge_p2 = init_vectors[i + 1].lerp(init_vectors[i + 2], p as f32 / n as f32);
-            let edge_p3 = init_vectors[i].lerp(init_vectors[i + 2], (p + 1) as f32 / n as f32);
-            let edge_p4 = init_vectors[i + 1].lerp(init_vectors[i + 2], (p + 1) as f32 / n as f32);
+            let on_left_edge = top.lerp(left, (p + 1) as f32 / n as f32);
+            let on_right_edge = top.lerp(right, (p + 1) as f32 / n as f32);
 
-            for q in 0..(n - p) {
-                //edge index 2
-                let a = edge_p1.lerp(edge_p2, q as f32 / (n - p) as f32);
-                let b = edge_p1.lerp(edge_p2, (q + 1) as f32 / (n - p) as f32);
-                let (c, d) = if edge_p3 == edge_p4 {
-                    (edge_p3, edge_p3)
-                } else {
-                    (
-                        edge_p3.lerp(edge_p4, q as f32 / (n - p - 1) as f32),
-                        edge_p3.lerp(edge_p4, (q + 1) as f32 / (n - p - 1) as f32),
-                    )
-                };
-
-                triangles.push(j);
-                vertices.push(Vec4::new(a.x, a.y, a.z, 1.0));
-                // normals.push(Vec3::new())
-                j += 1;
-                triangles.push(j);
-                vertices.push(Vec4::new(b.x, b.y, b.z, 1.0));
-                j += 1;
-                triangles.push(j);
-                vertices.push(Vec4::new(c.x, c.y, c.z, 1.0));
-                j += 1;
-
-                if q < n - p - 1 {
-                    triangles.push(j);
-                    vertices.push(Vec4::new(c.x, c.y, c.z, 1.0));
-                    j += 1;
-
-                    triangles.push(j);
-                    vertices.push(Vec4::new(b.x, b.y, b.z, 1.0));
-                    j += 1;
-
-                    triangles.push(j);
-                    vertices.push(Vec4::new(d.x, d.y, d.z, 1.0));
-                    j += 1;
-                }
+            for q in 0..=p {
+                let v = on_left_edge.lerp(on_right_edge, q as f32 / (p + 1) as f32);
+                vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
             }
         }
+
+        // ] equator, south pole [
+        for p in 1..n {
+            let on_left_edge = left.lerp(bottom, p as f32 / n as f32);
+            let on_right_edge = right.lerp(bottom, p as f32 / n as f32);
+
+            for q in 0..(n - p) {
+                let a = on_left_edge.lerp(on_right_edge, q as f32 / (n - p) as f32);
+                vertices.push(Vec4::new(a.x, a.y, a.z, 1.0));
+            }
+        }
+
+        //add the south pole
+        vertices.push(Vec4::new(bottom.x, bottom.y, bottom.z, 1.0));
+
+        //endregion
+
+        //region Indices
+
+        let idx = |face_idx: u16| (index_start + face_idx) % vertex_num;
+
+        // the top triangle
+        indices.push(idx(1)); //add the first triangle twice to break with the previous strip
+        indices.push(idx(1));
+        indices.push(idx(0));
+        indices.push(idx(num_vertices_per_side + 1));
+        //degenerate triangles to break to the next strip
+        indices.push(idx(num_vertices_per_side + 1));
+        indices.push(idx(num_vertices_per_side + 1)); //twice, to avoid flipping the winding
+
+        let mut start_of_previous_line = idx(1);
+        for p in 1..n {
+            let start_of_current_line = start_of_previous_line + p;
+            indices.push(start_of_current_line); //add the first index twice, to force a break in the triangle strip with a degenerate triangle
+            indices.push(start_of_current_line);
+            for q in 0..p {
+                indices.push(start_of_previous_line + q);
+                indices.push(start_of_current_line + q + 1);
+            }
+
+            //close the seam
+            indices.push((num_vertices_per_side + start_of_previous_line) % vertex_num);
+            indices.push((num_vertices_per_side + start_of_current_line) % vertex_num);
+
+            indices.push(indices[indices.len() - 1]); //add that last index twice
+            indices.push(indices[indices.len() - 1]); //add that last index trhice, to avoid flipping the winding
+            start_of_previous_line = start_of_current_line;
+        }
+
+        indices.remove(indices.len() - 1); //that last flip should happen
+
+        for p in 0..n - 1 {
+            let pp = n - p;
+            let start_of_current_line = start_of_previous_line + pp;
+            indices.push(start_of_previous_line);
+            indices.push(start_of_previous_line);
+            for q in 0..pp - 1 {
+                indices.push(start_of_current_line + q);
+                indices.push(start_of_previous_line + q + 1);
+            }
+
+            //close the seam
+            indices.push((num_vertices_per_side + start_of_current_line) % vertex_num);
+            indices.push((num_vertices_per_side + start_of_previous_line) % vertex_num);
+
+            indices.push(indices[indices.len() - 1]); //add that last index twice
+            indices.push(indices[indices.len() - 1]); //add that last index thrice
+            start_of_previous_line = start_of_current_line;
+        }
+
+        // the bottom triangle
+        indices.push(idx(num_vertices_per_side - 2));
+        indices.push(idx(num_vertices_per_side - 2));
+        indices.push(idx(num_vertices_per_side - 1));
+        indices.push(idx(2 * num_vertices_per_side - 2));
+        //degenerate triangles to break to the next face
+        indices.push(idx(2 * num_vertices_per_side - 2));
+
+        //endregion
     }
 
-    let uv = create_uv(n, &vertices);
+    //region duplicate last edge vertices
+    let duplicate_edge_vertex_num = n * 2 - 1;
+
+    let mut acc = 0;
+    for v in 0..n {
+        let vf = (v + 1) as f32;
+        let nf = n as f32;
+        let v = north_pole.lerp(back, vf / nf);
+
+        vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
+        acc += 1;
+    }
+
+    for v in 1..n {
+        let vf = v as f32;
+        let nf = n as f32;
+        let v = back.lerp(south_pole, vf / nf);
+
+        vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
+        acc += 1;
+    }
+
+    assert!(acc == duplicate_edge_vertex_num);
+
+    let mut mapping = HashMap::new();
+    let mut acc = 1u16;
+    for i in 1..=n {
+        mapping.insert(acc, vertex_num + i - 1);
+        acc += i;
+    }
+    for i in 1..n {
+        mapping.insert(acc, vertex_num + i + n - 1);
+        acc = acc + n - i;
+    }
+    let mapping = mapping;
+
+    let min_index = num_vertices_per_side * 3;
+    let min_index = min_index as u16;
+    let u = indices.len() / 4;
+    let tofixup = &mut indices[3 * u..];
+    for f in tofixup {
+        if *f < min_index {
+            let replacement = mapping.get(f).expect("the only low indices in this quadrant should be on the edge of the next quadrant, all of which should have gotten a mapping!");
+            *f = *replacement;
+        }
+    }
+    //endregion
+
+    let uv = create_uv(n as usize, &vertices);
+
     for v in &mut vertices {
         *v *= radius;
         v.w = 1.0;
     }
-    // mesh.RecalculateNormals();
-    // CreateTangents(mesh);
 
-    (vertices, uv, triangles)
+    (vertices, uv, indices)
 }
 
 fn create_uv(n: usize, vertices: &[Vec4]) -> Vec<Vec2> {
-    let vertex_num = n * n * 24;
-    let mut uv = Vec::with_capacity(vertex_num);
+    let mut uv = Vec::with_capacity(vertices.len());
 
-    let tri = n * n; // divided triangle count (1,4,9...)
-    let uv_limit = tri * 18; // range of wrap UV.x
+    let tri = 2 + n * n;
 
-    for (i, v) in vertices.iter().enumerate() {
+    for v in vertices.iter() {
         let mut texture_coordinates = Vec2::splat(0.0);
-        if (v.y == 0.0) && (i > uv_limit) {
-            texture_coordinates.x = 1.0;
-        } else {
-            texture_coordinates.x = v.y.atan2(v.x) / (2.0 * std::f32::consts::PI) - 0.5;
-        }
+        texture_coordinates.x = v.y.atan2(v.x) / (2.0 * std::f32::consts::PI) - 0.5;
 
         if texture_coordinates.x < 0.0 {
             texture_coordinates.x += 1.0;
@@ -142,86 +207,58 @@ fn create_uv(n: usize, vertices: &[Vec4]) -> Vec<Vec2> {
         uv.push(texture_coordinates);
     }
 
-    let tt = tri * 3;
+    let tt = tri;
     uv[0].x = 0.125;
-    uv[tt].x = 0.125;
-    uv[2 * tt].x = 0.375;
-    uv[3 * tt].x = 0.375;
-    uv[4 * tt].x = 0.625;
-    uv[5 * tt].x = 0.628;
-    uv[6 * tt].x = 0.875;
-    uv[7 * tt].x = 0.875;
+    uv[tt - 1].x = 0.125;
+
+    uv[tt].x = 0.375;
+    uv[2 * tt - 1].x = 0.375;
+
+    uv[2 * tt].x = 0.625;
+    uv[3 * tt - 1].x = 0.625;
+
+    uv[3 * tt].x = 0.875;
+    uv[4 * tt - 1].x = 0.875;
+
+    // force u to 1.0 for all duplicated seam vertices
+    let seam_start_index = vertices.len() - (2 * n - 1);
+    for uv in &mut uv[seam_start_index..] {
+        uv.x = 1.0;
+    }
 
     uv
 }
 
-// static void CreateTangents(Mesh mesh)
-// {
-//     int[] triangles = mesh.triangles;
-//     Vec3[] vertices = mesh.vertices;
-//     Vec2[] uv = mesh.uv;
-//     Vec3[] normals = mesh.normals;
+#[cfg(test)]
+mod test {
+    use super::*;
 
-//     int triangleCount = triangles.Length;
-//     int vertexCount = vertices.Length;
-
-//     Vec3[] tan1 = Vec3::new[vertexCount];
-//     Vec3[] tan2 = Vec3::new[vertexCount];
-
-//     Vector4[] tangents = new Vector4[vertexCount];
-
-//     for (int i = 0; i < triangleCount; i += 3)
-//     {
-//         int i1 = triangles[i + 0];
-//         int i2 = triangles[i + 1];
-//         int i3 = triangles[i + 2];
-
-//         Vec3 v1 = vertices[i1];
-//         Vec3 v2 = vertices[i2];
-//         Vec3 v3 = vertices[i3];
-
-//         Vec2 w1 = uv[i1];
-//         Vec2 w2 = uv[i2];
-//         Vec2 w3 = uv[i3];
-
-//         float x1 = v2.x - v1.x;
-//         float x2 = v3.x - v1.x;
-//         float y1 = v2.y - v1.y;
-//         float y2 = v3.y - v1.y;
-//         float z1 = v2.z - v1.z;
-//         float z2 = v3.z - v1.z;
-
-//         float s1 = w2.x - w1.x;
-//         float s2 = w3.x - w1.x;
-//         float t1 = w2.y - w1.y;
-//         float t2 = w3.y - w1.y;
-
-//         float r = 1.0f / (s1 * t2 - s2 * t1);
-
-//         Vec3 sdir = Vec3::new((t2 * x1 - t1 * x2) * r, (t2 * y1 - t1 * y2) * r, (t2 * z1 - t1 * z2) * r);
-//         Vec3 tdir = Vec3::new((s1 * x2 - s2 * x1) * r, (s1 * y2 - s2 * y1) * r, (s1 * z2 - s2 * z1) * r);
-
-//         tan1[i1] += sdir;
-//         tan1[i2] += sdir;
-//         tan1[i3] += sdir;
-
-//         tan2[i1] += tdir;
-//         tan2[i2] += tdir;
-//         tan2[i3] += tdir;
-//     }
-
-//     for (int i = 0; i < vertexCount; ++i)
-//     {
-//         Vec3 n = normals[i];
-//         Vec3 t = tan1[i];
-
-//         Vec3.OrthoNormalize(ref n, ref t);
-//         tangents[i].x = t.x;
-//         tangents[i].y = t.y;
-//         tangents[i].z = t.z;
-
-//         tangents[i].w = ( Vec3.Dot( Vec3.Cross(n, t), tan2[i]) < 0.0f) ? -1.0f : 1.0f;
-//     }
-
-//     mesh.tangents = tangents;
-// }
+    #[test]
+    pub fn lod_one() {
+        let (vert, uv, idx) = create(1, 2.0);
+        println!("vert: {vert:?}");
+        println!("idx: {idx:?}");
+        println!("uv: {uv:?}");
+    }
+    #[test]
+    pub fn lod_two() {
+        let (vert, uv, idx) = create(2, 2.0);
+        println!("vert: {vert:?}");
+        println!("idx: {idx:?}");
+        println!("uv: {uv:?}");
+    }
+    #[test]
+    pub fn lod_three() {
+        let (vert, uv, idx) = create(3, 2.0);
+        println!("vert: {vert:?}");
+        println!("idx: {idx:?}");
+        println!("uv: {uv:?}");
+    }
+    #[test]
+    pub fn lod_five() {
+        let (vert, uv, idx) = create(5, 2.0);
+        println!("vert: {vert:?}");
+        println!("idx: {idx:?}");
+        println!("uv: {uv:?}");
+    }
+}
