@@ -434,45 +434,18 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     let mut reload_texture = false;
     //draw ui
     {
-        let mut t = [
-            app.camera.eye.x / WORLD_RADIUS,
-            app.camera.eye.y / WORLD_RADIUS,
-            app.camera.eye.z / WORLD_RADIUS,
-            (app.camera.near as f32 / WORLD_RADIUS),
-            (app.camera.far as f32 / WORLD_RADIUS),
-        ];
+        let mut eye_x = app.camera.eye.x / WORLD_RADIUS;
+        let mut eye_y = app.camera.eye.y / WORLD_RADIUS;
+        let mut eye_z = app.camera.eye.z / WORLD_RADIUS;
+        let mut near = app.camera.near as f32 / WORLD_RADIUS;
+        let mut far = app.camera.far as f32 / WORLD_RADIUS;
+        let mut camera_changed = false;
 
         let window = imgui::Window::new("Hello world");
-        // let current_shader = context.current_shader.as_ref();
         window
             .position([0.0, 0.0], Condition::FirstUseEver)
-            .size([400.0, 400.0], Condition::FirstUseEver)
+            .size([200.0, 400.0], Condition::FirstUseEver)
             .build(&ui, || {
-                ui.text("Text");
-                reload_shaders = ui.button("Reload shaders");
-                reload_texture = ui.button("Hi-res texture");
-                ui.text("Camera");
-                imgui::Drag::new("eye_x")
-                    .range(-20.0, 20.0)
-                    .speed(0.05)
-                    .build(&ui, &mut t[0]);
-                imgui::Drag::new("eye_y")
-                    .range(-20.0, 20.0)
-                    .speed(0.05)
-                    .build(&ui, &mut t[1]);
-                imgui::Drag::new("eye_z")
-                    .range(-20.0, 20.0)
-                    .speed(0.05)
-                    .build(&ui, &mut t[2]);
-                imgui::Drag::new("near")
-                    .range(0.0, 20.0)
-                    .speed(0.05)
-                    .build(&ui, &mut t[3]);
-                imgui::Drag::new("far")
-                    .range(0.0, 20.0)
-                    .speed(0.05)
-                    .build(&ui, &mut t[4]);
-
                 let mut s = i32::from(app.subdivisions);
 
                 reload_vertex_buffer = imgui::InputInt::new(&ui, "subdivisions", &mut s).build();
@@ -481,17 +454,51 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     println!("subs changed: {}", app.subdivisions);
                 }
                 ui.checkbox("demo", &mut app.demo_window_open);
+
+                if ui.collapsing_header("Rendering", imgui::TreeNodeFlags::empty()) {
+                    reload_shaders = ui.button("Reload shaders");
+                    reload_texture = ui.button("Hi-res texture");
+                }
+                if ui.collapsing_header("Camera", imgui::TreeNodeFlags::empty()) {
+                    camera_changed = camera_changed
+                        | imgui::Drag::new("eye_x")
+                            .range(-20.0, 20.0)
+                            .speed(0.05)
+                            .build(&ui, &mut eye_x);
+                    camera_changed = camera_changed
+                        | imgui::Drag::new("eye_y")
+                            .range(-20.0, 20.0)
+                            .speed(0.05)
+                            .build(&ui, &mut eye_y);
+                    camera_changed = camera_changed
+                        | imgui::Drag::new("eye_z")
+                            .range(-20.0, 20.0)
+                            .speed(0.05)
+                            .build(&ui, &mut eye_z);
+                    camera_changed = camera_changed
+                        | imgui::Drag::new("near")
+                            .range(0.0, 20.0)
+                            .speed(0.05)
+                            .build(&ui, &mut near);
+                    camera_changed = camera_changed
+                        | imgui::Drag::new("far")
+                            .range(0.0, 20.0)
+                            .speed(0.05)
+                            .build(&ui, &mut far);
+                }
             });
 
         if app.demo_window_open {
             ui.show_demo_window(&mut app.demo_window_open);
         }
 
-        app.camera.eye.x = t[0] * WORLD_RADIUS;
-        app.camera.eye.y = t[1] * WORLD_RADIUS;
-        app.camera.eye.z = t[2] * WORLD_RADIUS;
-        app.camera.near = f64::from(t[3]) * f64::from(WORLD_RADIUS);
-        app.camera.far = f64::from(t[4]) * f64::from(WORLD_RADIUS);
+        if camera_changed {
+            app.camera.eye.x = eye_x * WORLD_RADIUS;
+            app.camera.eye.y = eye_y * WORLD_RADIUS;
+            app.camera.eye.z = eye_z * WORLD_RADIUS;
+            app.camera.near = f64::from(near) * f64::from(WORLD_RADIUS);
+            app.camera.far = f64::from(far) * f64::from(WORLD_RADIUS);
+        }
     }
 
     if reload_vertex_buffer {
