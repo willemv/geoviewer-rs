@@ -161,6 +161,7 @@ fn create_render_pipeline(
             bias: wgpu::DepthBiasState::default(),
         }),
         multisample: wgpu::MultisampleState::default(),
+        multiview: None,
     })
 }
 
@@ -203,8 +204,8 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::LowPower,
             compatible_surface: Some(&surface),
+            ..Default::default()
         })
         .await
         .ok_or_else(|| SimpleError::new("Could not find appropriate adapater"))?;
@@ -291,10 +292,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler {
-                    comparison: false,
-                    filtering: true,
-                },
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
         ],
@@ -420,7 +418,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 }
 
 fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(), Box<dyn Error>> {
-    let frame = context.surface.get_current_frame()?.output;
+    let frame = context.surface.get_current_texture()?;
 
     let duration = SystemTime::now()
         .duration_since(app.start_time)?
@@ -678,8 +676,10 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
         )?;
     }
 
+
     context.queue.submit(Some(encoder.finish()));
 
+    frame.present();
     Ok(())
 }
 

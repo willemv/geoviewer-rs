@@ -1,4 +1,3 @@
-[[block]]
 struct VertexUniforms {
     model: mat4x4<f32>;
     view: mat4x4<f32>;
@@ -30,7 +29,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-[[block]]
 struct FragmentUniforms {
     iResolution: vec4<f32>;
     iTime: f32;
