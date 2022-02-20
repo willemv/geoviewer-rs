@@ -33,8 +33,6 @@ use model::WORLD_RADIUS;
 
 mod ellipsoid;
 
-
-
 mod octosphere;
 
 mod simple_error;
@@ -675,7 +673,6 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
             &mut render_pass,
         )?;
     }
-
 
     context.queue.submit(Some(encoder.finish()));
 

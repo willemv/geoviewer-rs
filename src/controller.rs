@@ -59,7 +59,6 @@ impl Controller {
     }
 
     pub fn scroll(&mut self, y: f32, camera: &mut Camera) {
-
         let axis = crate::ELLIPSOID.semimajor_axis / 2.0;
         let axis = axis as f32;
         self.mouse_down_coordinates = None;
@@ -83,9 +82,7 @@ impl Controller {
         camera.eye = new_eye;
 
         camera.near =
-            f64::from(new_distance_s + axis - max_dist_center_geometry as f32 - 1e3)
-                .max(0.0);
-        camera.far =
-            f64::from(new_distance_s + axis + max_dist_center_geometry as f32 + 1e3);
+            f64::from(new_distance_s + axis - max_dist_center_geometry as f32 - 1e3).max(0.0);
+        camera.far = f64::from(new_distance_s + axis + max_dist_center_geometry as f32 + 1e3);
     }
 }

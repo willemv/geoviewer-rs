@@ -4,7 +4,7 @@ pub struct Ellipsoid {
     pub semiminor_axis: f64,
     pub inverse_flattening: f64,
     pub eccentricity: f64,
-    _private: ()
+    _private: (),
 }
 
 pub fn new(semimajor_axis: f64, inverse_flattening: f64) -> Ellipsoid {
@@ -37,9 +37,14 @@ mod test {
     #[test]
     fn create_wgs84() {
         let const_ellipsoid = wgs84();
-        let compd_ellipsoid = new(const_ellipsoid.semimajor_axis, const_ellipsoid.inverse_flattening);
+        let compd_ellipsoid = new(
+            const_ellipsoid.semimajor_axis,
+            const_ellipsoid.inverse_flattening,
+        );
 
-        assert!((const_ellipsoid.semiminor_axis - compd_ellipsoid.semiminor_axis).abs() < f64::EPSILON);
+        assert!(
+            (const_ellipsoid.semiminor_axis - compd_ellipsoid.semiminor_axis).abs() < f64::EPSILON
+        );
         assert!((const_ellipsoid.eccentricity - compd_ellipsoid.eccentricity).abs() < f64::EPSILON);
     }
 }
