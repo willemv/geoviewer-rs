@@ -1,8 +1,6 @@
 use glam::Vec3;
 
 use crate::camera::Camera;
-use crate::model::WORLD_RADIUS;
-
 use std::f32::consts::PI;
 
 pub struct Controller {
@@ -61,30 +59,33 @@ impl Controller {
     }
 
     pub fn scroll(&mut self, y: f32, camera: &mut Camera) {
+
+        let axis = crate::ELLIPSOID.semimajor_axis / 2.0;
+        let axis = axis as f32;
         self.mouse_down_coordinates = None;
         self.last_mouse_coordinates = None;
 
         let center = glam::Vec3::splat(0.0);
         let eye = camera.eye;
 
-        let max_dist_center_geometry = WORLD_RADIUS;
+        let max_dist_center_geometry = axis;
 
         // delta y of 1.0 means +10% distance from 'world surface' to camera
         let fraction = 1.0 + (y / 10.0);
 
         let current_distance = eye.distance(center);
         //TODO correct for current_distance < WORLD_RADIUS
-        let current_distance_s = current_distance - WORLD_RADIUS;
+        let current_distance_s = current_distance - axis;
         let new_distance_s = current_distance_s * fraction;
 
         let dir = eye - center;
-        let new_eye = dir.normalize() * (new_distance_s + WORLD_RADIUS);
+        let new_eye = dir.normalize() * (new_distance_s + axis);
         camera.eye = new_eye;
 
         camera.near =
-            f64::from(new_distance_s + WORLD_RADIUS - max_dist_center_geometry as f32 - 1e3)
+            f64::from(new_distance_s + axis - max_dist_center_geometry as f32 - 1e3)
                 .max(0.0);
         camera.far =
-            f64::from(new_distance_s + WORLD_RADIUS + max_dist_center_geometry as f32 + 1e3);
+            f64::from(new_distance_s + axis + max_dist_center_geometry as f32 + 1e3);
     }
 }

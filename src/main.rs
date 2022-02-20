@@ -31,6 +31,10 @@ use controller::Controller;
 mod model;
 use model::WORLD_RADIUS;
 
+mod ellipsoid;
+
+
+
 mod octosphere;
 
 mod simple_error;
@@ -84,6 +88,8 @@ struct FragmentUniforms {
 
 unsafe impl Pod for FragmentUniforms {}
 unsafe impl Zeroable for FragmentUniforms {}
+
+const ELLIPSOID: ellipsoid::Ellipsoid = ellipsoid::wgs84();
 
 struct RenderContext {
     window: Window,
@@ -222,7 +228,7 @@ async fn setup(window: Window) -> Result<(RenderContext, App, Gui), Box<dyn Erro
 
     let subdivisions = 16;
     //setup data
-    let (vertices, uvs, indices) = octosphere::create(subdivisions, WORLD_RADIUS);
+    let (vertices, uvs, indices) = octosphere::create(subdivisions, &ELLIPSOID);
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&vertices),
@@ -502,7 +508,7 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
     }
 
     if reload_vertex_buffer {
-        let (vertices, uvs, indices) = octosphere::create(app.subdivisions, WORLD_RADIUS);
+        let (vertices, uvs, indices) = octosphere::create(app.subdivisions, &ELLIPSOID);
         let vertex_data = bytemuck::cast_slice(&vertices);
         let uv_data = bytemuck::cast_slice(&uvs);
         let index_data = bytemuck::cast_slice(&indices);

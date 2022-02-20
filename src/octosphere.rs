@@ -1,9 +1,11 @@
 #![allow(clippy::many_single_char_names)]
 use std::collections::HashMap;
 
+use crate::ellipsoid;
+
 use glam::{f32, Quat, Vec2, Vec4};
 
-pub fn create(n: u8, radius: f32) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
+pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
     let n = n as u16;
 
     let num_vertices_per_side = (2 + n * n) as u16;
@@ -182,8 +184,13 @@ pub fn create(n: u8, radius: f32) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
 
     let uv = create_uv(n as usize, &vertices);
 
+    let radius = ellipsoid.semimajor_axis / 2.0;
+    let radius = radius as f32;
+    let adjustment = (ellipsoid.inverse_flattening - 1.0) / ellipsoid.inverse_flattening;
+    let adjustment = adjustment as f32;
     for v in &mut vertices {
         *v *= radius;
+        v.z = v.z * adjustment;
         v.w = 1.0;
     }
 
@@ -235,28 +242,28 @@ mod test {
 
     #[test]
     pub fn lod_one() {
-        let (vert, uv, idx) = create(1, 2.0);
+        let (vert, uv, idx) = create(1, &ellipsoid::wgs84());
         println!("vert: {vert:?}");
         println!("idx: {idx:?}");
         println!("uv: {uv:?}");
     }
     #[test]
     pub fn lod_two() {
-        let (vert, uv, idx) = create(2, 2.0);
+        let (vert, uv, idx) = create(2, &ellipsoid::wgs84());
         println!("vert: {vert:?}");
         println!("idx: {idx:?}");
         println!("uv: {uv:?}");
     }
     #[test]
     pub fn lod_three() {
-        let (vert, uv, idx) = create(3, 2.0);
+        let (vert, uv, idx) = create(3, &ellipsoid::wgs84());
         println!("vert: {vert:?}");
         println!("idx: {idx:?}");
         println!("uv: {uv:?}");
     }
     #[test]
     pub fn lod_five() {
-        let (vert, uv, idx) = create(5, 2.0);
+        let (vert, uv, idx) = create(5, &ellipsoid::wgs84());
         println!("vert: {vert:?}");
         println!("idx: {idx:?}");
         println!("uv: {uv:?}");
