@@ -6,9 +6,9 @@ use crate::ellipsoid;
 use glam::{f32, Quat, Vec2, Vec4};
 
 pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>, Vec<u16>) {
-    let n = n as u16;
+    let n = u16::from(n);
 
-    let num_vertices_per_side = (2 + n * n) as u16;
+    let num_vertices_per_side = 2 + n.pow(2);
     let vertex_num = num_vertices_per_side * 4;
     let mut vertices: Vec<Vec4> = Vec::with_capacity(vertex_num as usize);
     let mut indices = Vec::with_capacity(vertex_num as usize); //TODO: this initial capacity is not the actual size at the end, we can calculate that though
@@ -45,22 +45,22 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
 
         // ] north pole, equator ]
         for p in 0..n {
-            let on_left_edge = top.lerp(left, (p + 1) as f32 / n as f32);
-            let on_right_edge = top.lerp(right, (p + 1) as f32 / n as f32);
+            let on_left_edge = top.lerp(left, f32::from(p + 1) / f32::from(n));
+            let on_right_edge = top.lerp(right, f32::from(p + 1) / f32::from(n));
 
             for q in 0..=p {
-                let v = on_left_edge.lerp(on_right_edge, q as f32 / (p + 1) as f32);
+                let v = on_left_edge.lerp(on_right_edge, f32::from(q) / f32::from(p + 1));
                 vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
             }
         }
 
         // ] equator, south pole [
         for p in 1..n {
-            let on_left_edge = left.lerp(bottom, p as f32 / n as f32);
-            let on_right_edge = right.lerp(bottom, p as f32 / n as f32);
+            let on_left_edge = left.lerp(bottom, f32::from(p) / f32::from(n));
+            let on_right_edge = right.lerp(bottom, f32::from(p) / f32::from(n));
 
             for q in 0..(n - p) {
-                let a = on_left_edge.lerp(on_right_edge, q as f32 / (n - p) as f32);
+                let a = on_left_edge.lerp(on_right_edge, f32::from(q) / f32::from(n - p));
                 vertices.push(Vec4::new(a.x, a.y, a.z, 1.0));
             }
         }
@@ -139,8 +139,8 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
 
     let mut acc = 0;
     for v in 0..n {
-        let vf = (v + 1) as f32;
-        let nf = n as f32;
+        let vf = f32::from(v + 1);
+        let nf = f32::from(n);
         let v = north_pole.lerp(back, vf / nf);
 
         vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
@@ -148,8 +148,8 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
     }
 
     for v in 1..n {
-        let vf = v as f32;
-        let nf = n as f32;
+        let vf = f32::from(v);
+        let nf = f32::from(n);
         let v = back.lerp(south_pole, vf / nf);
 
         vertices.push(Vec4::new(v.x, v.y, v.z, 1.0));
@@ -171,7 +171,6 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
     let mapping = mapping;
 
     let min_index = num_vertices_per_side * 3;
-    let min_index = min_index as u16;
     let u = indices.len() / 4;
     let tofixup = &mut indices[3 * u..];
     for f in tofixup {
@@ -182,7 +181,7 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
     }
     //endregion
 
-    let uv = create_uv(n as usize, &vertices);
+    let uv = create_uv(usize::from(n), &vertices);
 
     let radius = ellipsoid.semimajor_axis / 2.0;
     let radius = radius as f32;
@@ -190,7 +189,7 @@ pub fn create(n: u8, ellipsoid: &ellipsoid::Ellipsoid) -> (Vec<Vec4>, Vec<Vec2>,
     let adjustment = adjustment as f32;
     for v in &mut vertices {
         *v *= radius;
-        v.z = v.z * adjustment;
+        v.z *= adjustment;
         v.w = 1.0;
     }
 

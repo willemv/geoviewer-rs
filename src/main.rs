@@ -462,31 +462,26 @@ fn render(context: &mut RenderContext, app: &mut App, gui: &mut Gui) -> Result<(
                     reload_texture = ui.button("Hi-res texture");
                 }
                 if ui.collapsing_header("Camera", imgui::TreeNodeFlags::empty()) {
-                    camera_changed = camera_changed
-                        | imgui::Drag::new("eye_x")
-                            .range(-20.0, 20.0)
-                            .speed(0.05)
-                            .build(&ui, &mut eye_x);
-                    camera_changed = camera_changed
-                        | imgui::Drag::new("eye_y")
-                            .range(-20.0, 20.0)
-                            .speed(0.05)
-                            .build(&ui, &mut eye_y);
-                    camera_changed = camera_changed
-                        | imgui::Drag::new("eye_z")
-                            .range(-20.0, 20.0)
-                            .speed(0.05)
-                            .build(&ui, &mut eye_z);
-                    camera_changed = camera_changed
-                        | imgui::Drag::new("near")
-                            .range(0.0, 20.0)
-                            .speed(0.05)
-                            .build(&ui, &mut near);
-                    camera_changed = camera_changed
-                        | imgui::Drag::new("far")
-                            .range(0.0, 20.0)
-                            .speed(0.05)
-                            .build(&ui, &mut far);
+                    camera_changed |= imgui::Drag::new("eye_x")
+                        .range(-20.0, 20.0)
+                        .speed(0.05)
+                        .build(&ui, &mut eye_x);
+                    camera_changed |= imgui::Drag::new("eye_y")
+                        .range(-20.0, 20.0)
+                        .speed(0.05)
+                        .build(&ui, &mut eye_y);
+                    camera_changed |= imgui::Drag::new("eye_z")
+                        .range(-20.0, 20.0)
+                        .speed(0.05)
+                        .build(&ui, &mut eye_z);
+                    camera_changed |= imgui::Drag::new("near")
+                        .range(0.0, 20.0)
+                        .speed(0.05)
+                        .build(&ui, &mut near);
+                    camera_changed |= imgui::Drag::new("far")
+                        .range(0.0, 20.0)
+                        .speed(0.05)
+                        .build(&ui, &mut far);
                 }
             });
 
